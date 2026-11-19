@@ -1,4 +1,3 @@
-from fafafafamugong.agent import chat
-from fafafafamugong.settings import Settings
+from fafafafamugong.cli import main
 
-chat(Settings())
+main()

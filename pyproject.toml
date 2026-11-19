@@ -1,0 +1,19 @@
+[build-system]
+requires = ['setuptools>=69']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'fafafa-famugong'
+version = '0.0.1'
+requires-python = '>=3.12'
+authors = [{name = 'panghanwu', email = 'keyboywu@gmail.com'}]
+dependencies = ['openai', 'pydantic-settings']
+
+[project.scripts]
+fa = 'fafafafamugong.cli:main'
+
+[tool.setuptools]
+packages = ['fafafafamugong']
+
+[tool.setuptools.package-data]
+fafafafamugong = ['*.toml']  # ship ages.toml with the package
