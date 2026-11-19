@@ -1,13 +1,28 @@
+from pathlib import Path
+
 from openai import OpenAI
 
 from fafafafamugong.schema import Age
+from fafafafamugong.session import Session
 from fafafafamugong.settings import Settings
 
 
-def chat(settings: Settings):
+def chat(settings: Settings, home: Path):
     age = Age.load(settings.age)
     client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
-    messages = [{'role': 'system', 'content': age.identity}]
+    session_meta = {
+        'cwd': str(Path.cwd()),
+        'model': settings.model,
+        'age': settings.age
+    }
+    session = Session(home, session_meta)
+    messages = []
+
+    def add(message: dict):
+        messages.append(message)
+        session.append(message)
+
+    add({'role': 'system', 'content': age.identity})
 
     while True:
         try:
@@ -17,7 +32,7 @@ def chat(settings: Settings):
         if not user.strip():
             continue
 
-        messages.append({'role': 'user', 'content': user})
+        add({'role': 'user', 'content': user})
         stream = client.chat.completions.create(model=settings.model, messages=messages, stream=True)
         parts = []
         for chunk in stream:
@@ -27,4 +42,4 @@ def chat(settings: Settings):
             print(text, end='', flush=True)
             parts.append(text)
         print()
-        messages.append({'role': 'assistant', 'content': ''.join(parts)})
+        add({'role': 'assistant', 'content': ''.join(parts)})

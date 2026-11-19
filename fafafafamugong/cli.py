@@ -22,4 +22,4 @@ def main():
         settings = Settings()
     except ValidationError as e:
         sys.exit(f'{e}\n\nsettings file: {REPO_ENV}')
-    chat(settings)
+    chat(settings, home)
