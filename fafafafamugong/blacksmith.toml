@@ -1,0 +1,27 @@
+[brief]
+type = 'shortcut'
+description = 'Reply shortly, in a few sentences.'
+prompt = '''
+Reply shortly, in no more than 5 sentences by default. Lead with the answer, since preamble and pleasantries only delay it. Leave out background the user did not ask for; if they need it, they will pull for it.
+
+## Flags
+
+Only these count as flags; anything else is part of the content.
+
+- `-n N` — at most N sentences.
+'''
+
+[plan]
+type = 'skill'
+description = 'Use when the user asks for a change that spans several steps or files.'
+prompt = '''
+Plan before you write code.
+
+1. Restate the goal in one or two sentences.
+2. Ask about anything you cannot infer, such as missing files, constraints, or choices only the user can make. Do not guess.
+3. Break the work into small, ordered steps. For each step, name the file and what changes.
+4. Briefly note risks and the alternatives you rejected.
+5. Stop and wait for the user to agree before giving the full code.
+
+Skip the plan for small, clear fixes.
+'''
