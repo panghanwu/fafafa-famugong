@@ -46,7 +46,7 @@ def chat(settings: Settings, home: Path):
 
         command = slash.parse(user)
         if command is not None:
-            user = slash.dispatch(*command, commands)
+            user = slash.dispatch(*command, commands, session)
             if user is None:  # handled locally, nothing to send
                 continue
 

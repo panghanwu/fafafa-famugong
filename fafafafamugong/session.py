@@ -19,24 +19,38 @@ class Session:
                 return
             self._start()
             for r in self.pending:
-                self._write(r)
+                self._append_record(r)
             self.pending = []
             return
-        self._write(record)
+        self._append_record(record)
 
-    def _write(self, record: dict):
-        self._append_jsonl(self.full_path, record)
-        self._append_jsonl(self.current_path, record['message'])
+    def rename(self, title: str):
+        self.meta['title'] = title
+        if self.dir is not None:  # otherwise _start() writes it later
+            self._write_meta()
 
     def _start(self):
         now = datetime.now().astimezone()
-        self.dir = self.home / 'sessions' / f'{now:%Y-%m-%dT%H-%M-%S}-{secrets.token_hex(2)}'
+        self.dir = self.home / 'sessions' / f'{now:%Y-%m-%dT%H-%M}-{secrets.token_hex(3)}'
         self.meta_path = self.dir / 'meta.json'
         self.full_path = self.dir / 'full.jsonl'
         self.current_path = self.dir / 'current.jsonl'
         self.dir.mkdir(parents=True)
-        meta = {'started_at': now.isoformat(timespec='seconds'), **self.meta}
-        self.meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + '\n')
+        self.meta = {'started_at': now.isoformat(timespec='seconds'), **self.meta}
+        self._write_meta()
+
+    def _write_meta(self):
+        self._write_atomic(self.meta_path, json.dumps(self.meta, ensure_ascii=False, indent=2) + '\n')
+
+    def _append_record(self, record: dict):
+        self._append_jsonl(self.full_path, record)
+        self._append_jsonl(self.current_path, record['message'])
+
+    @staticmethod
+    def _write_atomic(path: Path, text: str):
+        tmp = path.with_suffix('.tmp')  # same folder, so replace stays atomic
+        tmp.write_text(text)
+        tmp.replace(path)
 
     @staticmethod
     def _append_jsonl(path: Path, record: dict):

@@ -2,12 +2,13 @@ from dataclasses import dataclass
 from typing import Callable
 
 from fafafafamugong.schema import Tech
+from fafafafamugong.session import Session
 
 
 @dataclass
 class BuiltinCommand:
     description: str
-    fn: Callable[[str], None]
+    fn: Callable[[Session, str], None]
 
 
 BUILTINS: dict[str, BuiltinCommand] = {}
@@ -22,15 +23,23 @@ def builtin(name: str, description: str):
 
 
 @builtin('exit', 'Leave the chat')
-def _exit(args: str):
+def _exit(session: Session, args: str):
     raise SystemExit
+
+
+@builtin('rename', 'Rename the session: /rename <title>')
+def _rename(session: Session, args: str):
+    if not args:  # later: let catzor pick a title
+        print('usage: /rename <title>')
+        return
+    session.rename(args)
+    print(f'renamed: {args}')
 
 
 def parse(text: str) -> tuple[str, str] | None:
     """Split '/name args' into (name, args); None if text is not a command."""
     if not text.startswith('/'):
         return None
-
     name, _, args = text[1:].partition(' ')
     if not name or '/' in name:  # a bare '/' or a path like /usr/bin
         return None
@@ -43,14 +52,14 @@ def merge(techs: dict[str, Tech]) -> dict[str, BuiltinCommand | Tech]:
     return {**shortcuts, **BUILTINS}  # built-ins win over shortcuts
 
 
-def dispatch(name: str, args: str, commands: dict[str, BuiltinCommand | Tech]) -> str | None:
+def dispatch(name: str, args: str, commands: dict[str, BuiltinCommand | Tech], session: Session) -> str | None:
     """Run a command. Return text to send to the model, or None."""
     command = commands.get(name)
     if command is None:
         print(f'unknown command: /{name}')
         return None
     if isinstance(command, BuiltinCommand):
-        command.fn(args)
+        command.fn(session, args)
         return None
     text = command.prompt.strip()
     if args:
