@@ -30,9 +30,9 @@ def chat(settings: Settings, home: Path):
     session = Session(home, session_meta)
     messages = []
 
-    def add(message: dict):
+    def add(message: dict, interrupted: bool = False):
         messages.append(message)
-        session.append(message)
+        session.append(message, interrupted)
 
     add({'role': 'system', 'content': system_prompt(age, techs)})
 
@@ -51,13 +51,24 @@ def chat(settings: Settings, home: Path):
                 continue
 
         add({'role': 'user', 'content': user})
-        stream = client.chat.completions.create(model=settings.model, messages=messages, stream=True)
         parts = []
-        for chunk in stream:
-            if not chunk.choices:  # some chunks carry only metadata
-                continue
-            text = chunk.choices[0].delta.content or ''  # content can be None
-            print(text, end='', flush=True)
-            parts.append(text)
-        print()
-        add({'role': 'assistant', 'content': ''.join(parts)})
+        interrupted = False
+        try:
+            with client.chat.completions.create(model=settings.model, messages=messages, stream=True) as stream:
+                for chunk in stream:
+                    if not chunk.choices:  # some chunks carry only metadata
+                        continue
+                    text = chunk.choices[0].delta.content or ''  # content can be None
+                    print(text, end='', flush=True)
+                    parts.append(text)
+        except KeyboardInterrupt:
+            interrupted = True
+
+        if interrupted:
+            hint = ' use /continue to finish the reply' if parts else ''
+            print(f'\n[interrupted]{hint}')
+        else:
+            print()
+
+        if parts:
+            add({'role': 'assistant', 'content': ''.join(parts)}, interrupted)

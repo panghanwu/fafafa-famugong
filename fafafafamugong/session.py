@@ -11,8 +11,10 @@ class Session:
         self.dir = None    # created on the first user message
         self.pending = []  # records waiting to be written
 
-    def append(self, message: dict):
+    def append(self, message: dict, interrupted: bool = False):
         record = {'ts': datetime.now().astimezone().isoformat(), 'message': message}
+        if interrupted:
+            record['interrupted'] = True
         if self.dir is None:  # before the first user message
             self.pending.append(record)
             if message['role'] != 'user':

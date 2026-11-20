@@ -11,6 +11,13 @@ Only these count as flags; anything else is part of the content.
 - `-n N` — at most N sentences.
 '''
 
+[continue]
+type = 'shortcut'
+description = 'Finish the interrupted reply.'
+prompt = '''
+Your previous reply was cut off. Continue from exactly where it stopped. Do not repeat what you already wrote, and do not add a preamble.
+'''
+
 [plan]
 type = 'skill'
 description = 'Use when the user asks for a change that spans several steps or files.'
