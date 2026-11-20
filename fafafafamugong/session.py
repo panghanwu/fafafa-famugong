@@ -5,26 +5,17 @@ from pathlib import Path
 
 
 class Session:
-    def __init__(self, home: Path, meta: dict):
+    def __init__(self, home: Path, meta: dict, system_prompt: str):
         self.home = home
         self.meta = meta
-        self.dir = None    # created on the first user message
-        self.pending = []  # records waiting to be written
+        self.messages = [{'role': 'system', 'content': system_prompt}]
+        self.dir = None  # created on the first user message
 
     def append(self, message: dict, interrupted: bool = False):
-        record = {'ts': datetime.now().astimezone().isoformat(), 'message': message}
-        if interrupted:
-            record['interrupted'] = True
         if self.dir is None:  # before the first user message
-            self.pending.append(record)
-            if message['role'] != 'user':
-                return
             self._start()
-            for r in self.pending:
-                self._append_record(r)
-            self.pending = []
-            return
-        self._append_record(record)
+        self.messages.append(message)
+        self._append_record(message, interrupted)
 
     def rename(self, title: str):
         self.meta['title'] = title
@@ -40,13 +31,17 @@ class Session:
         self.dir.mkdir(parents=True)
         self.meta = {'started_at': now.isoformat(timespec='seconds'), **self.meta}
         self._write_meta()
+        self._append_record(self.messages[0])  # the system prompt
 
     def _write_meta(self):
         self._write_atomic(self.meta_path, json.dumps(self.meta, ensure_ascii=False, indent=2) + '\n')
 
-    def _append_record(self, record: dict):
+    def _append_record(self, message: dict, interrupted: bool = False):
+        record = {'ts': datetime.now().astimezone().isoformat(), 'message': message}
+        if interrupted:
+            record['interrupted'] = True
         self._append_jsonl(self.full_path, record)
-        self._append_jsonl(self.current_path, record['message'])
+        self._append_jsonl(self.current_path, message)
 
     @staticmethod
     def _write_atomic(path: Path, text: str):

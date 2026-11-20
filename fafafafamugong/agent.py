@@ -8,7 +8,7 @@ from fafafafamugong.session import Session
 from fafafafamugong.settings import Settings
 
 
-def system_prompt(age: Age, techs: dict[str, Tech]) -> str:
+def cook_system_prompt(age: Age, techs: dict[str, Tech]) -> str:
     """Identity plus every skill; dark has no tools, so skills are always loaded."""
     parts = [age.identity.strip()]
     for name, tech in techs.items():
@@ -27,14 +27,7 @@ def chat(settings: Settings, home: Path):
         'model': settings.model,
         'age': settings.age
     }
-    session = Session(home, session_meta)
-    messages = []
-
-    def add(message: dict, interrupted: bool = False):
-        messages.append(message)
-        session.append(message, interrupted)
-
-    add({'role': 'system', 'content': system_prompt(age, techs)})
+    session = Session(home, session_meta, cook_system_prompt(age, techs))
 
     while True:
         try:
@@ -50,11 +43,11 @@ def chat(settings: Settings, home: Path):
             if user is None:  # handled locally, nothing to send
                 continue
 
-        add({'role': 'user', 'content': user})
+        session.append({'role': 'user', 'content': user})
         parts = []
         interrupted = False
         try:
-            with client.chat.completions.create(model=settings.model, messages=messages, stream=True) as stream:
+            with client.chat.completions.create(model=settings.model, messages=session.messages, stream=True) as stream:
                 for chunk in stream:
                     if not chunk.choices:  # some chunks carry only metadata
                         continue
@@ -71,4 +64,4 @@ def chat(settings: Settings, home: Path):
             print()
 
         if parts:
-            add({'role': 'assistant', 'content': ''.join(parts)}, interrupted)
+            session.append({'role': 'assistant', 'content': ''.join(parts)}, interrupted)
