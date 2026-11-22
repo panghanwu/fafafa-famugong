@@ -17,7 +17,7 @@ def cook_system_prompt(age: Age, techs: dict[str, Tech]) -> str:
     return '\n\n'.join(parts)
 
 
-def chat(settings: Settings, home: Path):
+def chat(settings: Settings, home: Path, folder: Path | None = None):
     age = Age.load(settings.age)
     techs = Tech.load(BLACKSMITH)
     commands = slash.merge(techs)
@@ -27,11 +27,20 @@ def chat(settings: Settings, home: Path):
         'model': settings.model,
         'age': settings.age
     }
-    session = Session(home, session_meta, cook_system_prompt(age, techs))
+    system_prompt = cook_system_prompt(age, techs)
+
+    # create/load session
+    if folder is None:
+        session = Session(home, session_meta, system_prompt)
+    else:
+        session = Session.load(folder, system_prompt)
+        for message in session.messages[-2:]:  # where we left off
+            if message['role'] != 'system':
+                print(('> ' if message['role'] == 'user' else '') + message['content'])
 
     while True:
         try:
-            user = input('> ')
+            user = input('\n> ')
         except (EOFError, KeyboardInterrupt):
             break
         if not user.strip():
@@ -59,7 +68,7 @@ def chat(settings: Settings, home: Path):
 
         if interrupted:
             hint = ' use /continue to finish the reply' if parts else ''
-            print(f'\n[interrupted]{hint}')
+            print(f'\n\n[interrupted]{hint}')
         else:
             print()
 

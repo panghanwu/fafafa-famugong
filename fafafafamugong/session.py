@@ -1,7 +1,11 @@
 import json
 import secrets
+import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Self
+
+from filelock import FileLock, Timeout
 
 
 class Session:
@@ -11,11 +15,31 @@ class Session:
         self.messages = [{'role': 'system', 'content': system_prompt}]
         self.dir = None  # created on the first user message
 
+    @classmethod
+    def load(cls, folder: Path, system_prompt: str) -> Self:
+        """Reopen a saved session, swapping in the current system prompt."""
+        meta = json.loads((folder / 'meta.json').read_text())
+        session = cls(folder.parent.parent, meta, system_prompt)
+        session._set_paths(folder)
+        session._lock()
+        with session.current_path.open() as f:
+            old = [json.loads(line) for line in f]
+        session.messages += [m for m in old if m['role'] != 'system']
+
+        # update full.jsonl
+        record = {'ts': datetime.now().astimezone().isoformat(), 'message': session.messages[0], 'resumed': True}
+        session._append_jsonl(session.full_path, record)
+
+        # update current.jsonl
+        text = ''.join(json.dumps(m, ensure_ascii=False) + '\n' for m in session.messages)
+        session._write_atomic(session.current_path, text)
+        return session
+
     def append(self, message: dict, interrupted: bool = False):
         if self.dir is None:  # before the first user message
             self._start()
         self.messages.append(message)
-        self._append_record(message, interrupted)
+        self._append_record(message, interrupted=interrupted)
 
     def rename(self, title: str):
         self.meta['title'] = title
@@ -24,14 +48,25 @@ class Session:
 
     def _start(self):
         now = datetime.now().astimezone()
-        self.dir = self.home / 'sessions' / f'{now:%Y-%m-%dT%H-%M}-{secrets.token_hex(3)}'
-        self.meta_path = self.dir / 'meta.json'
-        self.full_path = self.dir / 'full.jsonl'
-        self.current_path = self.dir / 'current.jsonl'
+        self._set_paths(self.home / 'sessions' / f'{now:%Y-%m-%dT%H-%M}-{secrets.token_hex(3)}')
         self.dir.mkdir(parents=True)
+        self._lock()
         self.meta = {'started_at': now.isoformat(timespec='seconds'), **self.meta}
         self._write_meta()
         self._append_record(self.messages[0])  # the system prompt
+
+    def _set_paths(self, folder: Path):
+        self.dir = folder
+        self.meta_path = folder / 'meta.json'
+        self.full_path = folder / 'full.jsonl'
+        self.current_path = folder / 'current.jsonl'
+
+    def _lock(self):
+        self.lock = FileLock(self.dir / 'lock')  # keep a reference: garbage collection releases it
+        try:
+            self.lock.acquire(blocking=False)
+        except Timeout:
+            sys.exit(f'session {get_session_id(self.dir)} is open in another terminal (see fa --list)')
 
     def _write_meta(self):
         self._write_atomic(self.meta_path, json.dumps(self.meta, ensure_ascii=False, indent=2) + '\n')
@@ -53,3 +88,45 @@ class Session:
     def _append_jsonl(path: Path, record: dict):
         with path.open('a') as f:
             f.write(json.dumps(record, ensure_ascii=False) + '\n')
+
+
+def find_sessions(home: Path, prefix: str = '') -> list[Path]:
+    """Sessions whose ID starts with prefix, most recently active first."""
+    root = home / 'sessions'
+    if not root.exists():
+        return []
+    folders = [
+        f for f in root.iterdir()
+        if (f / 'full.jsonl').exists() and get_session_id(f).startswith(prefix)
+    ]
+    return sorted(folders, key=get_last_active, reverse=True)
+
+
+def get_session_id(folder: Path) -> str:
+    """The hex suffix of the folder name, e.g. sessions/2026-11-21T15-49-039f90 -> 039f90."""
+    return folder.name.rsplit('-', 1)[-1]
+
+
+def get_last_active(folder: Path) -> float:
+    return (folder / 'full.jsonl').stat().st_mtime
+
+
+def is_in_use(folder: Path) -> bool:
+    """True if another fa process holds this session's lock."""
+    lock = FileLock(folder / 'lock')
+    try:
+        lock.acquire(blocking=False)
+    except Timeout:
+        return True
+    lock.release()
+    return False
+
+
+def get_preview(folder: Path) -> str:
+    """The title, or the first user message; the caller shortens it."""
+    meta = json.loads((folder / 'meta.json').read_text())
+    if 'title' in meta:
+        return meta['title']
+    with (folder / 'current.jsonl').open() as f:
+        messages = (json.loads(line) for line in f)
+        return next((m['content'] for m in messages if m['role'] == 'user'), '(empty)')
