@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from fafafafamugong.schema import Tech
+from fafafafamugong.schema import BLACKSMITH, Tech
 from fafafafamugong.session import Session
 
 
@@ -9,31 +9,51 @@ from fafafafamugong.session import Session
 class BuiltinCommand:
     description: str
     fn: Callable[[Session, str], None]
+    aliases: tuple[str, ...] = ()
 
 
-BUILTINS: dict[str, BuiltinCommand] = {}
+BUILTINS: dict[str, BuiltinCommand] = {}  # aliases are keys too, pointing to the same command
 
 
-def builtin(name: str, description: str):
+def builtin(name: str, description: str, aliases: tuple[str, ...] = ()):
     """Register a function as a built-in slash command."""
     def register(fn):
-        BUILTINS[name] = BuiltinCommand(description, fn)
+        command = BuiltinCommand(description, fn, aliases)
+        for key in (name, *aliases):
+            BUILTINS[key] = command
         return fn
     return register
 
 
-@builtin('exit', 'Leave the chat')
+@builtin('exit', 'Leave the chat', aliases=('q',))
 def _exit(session: Session, args: str):
     raise SystemExit
 
 
-@builtin('rename', 'Rename the session: /rename <title>')
+@builtin('rename', 'Rename the session: /rename <title>', aliases=('r',))
 def _rename(session: Session, args: str):
     if not args:  # later: let catzor pick a title
         print('usage: /rename <title>')
         return
     session.rename(args)
     print(f'renamed: {args}')
+
+
+@builtin('help', 'List commands, shortcuts and skills', aliases=('h',))
+def _help(session: Session, args: str):
+    techs = Tech.load(BLACKSMITH)
+    commands = [
+        (', '.join(f'/{n}' for n in (name, *command.aliases)), command.description)
+        for name, command in BUILTINS.items() if name not in command.aliases
+    ]
+    shortcuts = [(f'/{n}', t.description) for n, t in techs.items() if t.type == 'shortcut' and n not in BUILTINS]
+    skills = [(n, t.description) for n, t in techs.items() if t.type == 'skill']
+    width = max(len(label) for label, _ in commands + shortcuts + skills)
+    for title, rows in [('commands', commands), ('shortcuts', shortcuts), ('skills (used by the model)', skills)]:
+        if rows:
+            print(f'{title}:')
+            for label, description in rows:
+                print(f'  {label:<{width}}  {description}')
 
 
 def parse(text: str) -> tuple[str, str] | None:

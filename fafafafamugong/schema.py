@@ -31,4 +31,7 @@ class Tech(BaseModel):
         if not path.exists():
             return {}
         techs = tomllib.loads(path.read_text())
+        for name in techs:
+            if len(name) == 1:  # kept for built-in aliases such as /q
+                raise ValueError(f'{path}: [{name}] single-letter names are reserved for built-in aliases')
         return {name: cls.model_validate(tech) for name, tech in techs.items()}
