@@ -2,7 +2,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from fafafafamugong import slash
+from fafafafamugong import slash, vibe
 from fafafafamugong.schema import BLACKSMITH, Age, Tech
 from fafafafamugong.session import Session
 from fafafafamugong.settings import Settings
@@ -38,10 +38,11 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
             if message['role'] != 'system':
                 print(('> ' if message['role'] == 'user' else '') + message['content'])
     session.add_run(run)
+    read_input = vibe.make_reader(home, commands)
 
     while True:
         try:
-            user = input('\n> ')
+            user = read_input()
         except (EOFError, KeyboardInterrupt):
             break
         if not user.strip():

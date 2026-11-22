@@ -7,7 +7,7 @@ name = 'fafafa-famugong'
 version = '0.0.1'
 requires-python = '>=3.12'
 authors = [{name = 'panghanwu', email = 'keyboywu@gmail.com'}]
-dependencies = ['filelock', 'openai', 'pydantic-settings']
+dependencies = ['filelock', 'openai', 'prompt_toolkit', 'pydantic-settings']
 
 [project.scripts]
 fa = 'fafafafamugong.cli:main'
@@ -17,3 +17,7 @@ packages = ['fafafafamugong']
 
 [tool.setuptools.package-data]
 fafafafamugong = ['*.toml']  # ship ages.toml with the package
+
+[tool.isort]
+known_first_party = ['fafafafamugong']  # the editor may open the parent folder, where isort cannot tell
+line_length = 120
