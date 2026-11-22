@@ -13,6 +13,7 @@ class Session:
         self.home = home
         self.meta = {}  # a title or run can arrive before _start()
         self.messages = [{'role': 'system', 'content': system_prompt}]
+        self.usage = None  # token usage of the last reply
         self.dir = None  # created on the first user message
 
     @classmethod
@@ -25,6 +26,9 @@ class Session:
         with session.current_path.open() as f:
             old = [json.loads(line) for line in f]
         session.messages += [m for m in old if m['role'] != 'system']
+        with session.full_path.open() as f:
+            records = [json.loads(line) for line in f]
+        session.usage = next((r['usage'] for r in reversed(records) if 'usage' in r), None)
 
         # update full.jsonl
         record = {'ts': datetime.now().astimezone().isoformat(), 'message': session.messages[0], 'resumed': True}
@@ -35,11 +39,13 @@ class Session:
         session._write_atomic(session.current_path, text)
         return session
 
-    def append(self, message: dict, interrupted: bool = False):
+    def append(self, message: dict, interrupted: bool = False, usage: dict | None = None):
         if self.dir is None:  # before the first user message
             self._start()
         self.messages.append(message)
-        self._append_record(message, interrupted=interrupted)
+        if usage is not None:
+            self.usage = usage
+        self._append_record(message, interrupted=interrupted, usage=usage)
 
     def rename(self, title: str):
         self.meta['title'] = title
@@ -77,10 +83,12 @@ class Session:
     def _write_meta(self):
         self._write_atomic(self.meta_path, json.dumps(self.meta, ensure_ascii=False, indent=2) + '\n')
 
-    def _append_record(self, message: dict, interrupted: bool = False):
+    def _append_record(self, message: dict, interrupted: bool = False, usage: dict | None = None):
         record = {'ts': datetime.now().astimezone().isoformat(), 'message': message}
         if interrupted:
             record['interrupted'] = True
+        if usage is not None:
+            record['usage'] = usage
         self._append_jsonl(self.full_path, record)
         self._append_jsonl(self.current_path, message)
 

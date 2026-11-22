@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
+from fafafafamugong import vibe
 from fafafafamugong.schema import BLACKSMITH, Tech
 from fafafafamugong.session import Session
 
@@ -33,10 +34,10 @@ def _exit(session: Session, args: str):
 @builtin('rename', 'Rename the session: /rename <title>', aliases=('r',))
 def _rename(session: Session, args: str):
     if not args:  # later: let catzor pick a title
-        print('usage: /rename <title>')
+        vibe.notice('warn', 'usage', '/rename <title>')
         return
     session.rename(args)
-    print(f'renamed: {args}')
+    vibe.notice('ok', 'renamed', args)
 
 
 @builtin('help', 'List commands, shortcuts and skills', aliases=('h',))
@@ -76,7 +77,7 @@ def dispatch(name: str, args: str, commands: dict[str, BuiltinCommand | Tech], s
     """Run a command. Return text to send to the model, or None."""
     command = commands.get(name)
     if command is None:
-        print(f'unknown command: /{name}')
+        vibe.notice('error', 'unknown command', f'/{name}')
         return None
     if isinstance(command, BuiltinCommand):
         command.fn(session, args)

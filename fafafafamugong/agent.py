@@ -34,11 +34,9 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
         session = Session(home, system_prompt)
     else:
         session = Session.load(folder, system_prompt)
-        for message in session.messages[-2:]:  # where we left off
-            if message['role'] != 'system':
-                print(('> ' if message['role'] == 'user' else '') + message['content'])
+        vibe.show_resumed(session)
     session.add_run(run)
-    read_input = vibe.make_reader(home, commands)
+    read_input = vibe.make_reader(home, commands, session, settings.model)
 
     while True:
         try:
@@ -55,24 +53,32 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
                 continue
 
         session.append({'role': 'user', 'content': user})
-        parts = []
+        flare = vibe.Flare(settings.model)
+        usage = None
         interrupted = False
         try:
-            with client.chat.completions.create(model=settings.model, messages=session.messages, stream=True) as stream:
+            with (
+                flare,
+                client.chat.completions.create(
+                    model=settings.model,
+                    messages=session.messages,
+                    stream=True,
+                    stream_options={'include_usage': True},
+                ) as stream,
+            ):
                 for chunk in stream:
+                    if chunk.usage:
+                        usage = {'prompt_tokens': chunk.usage.prompt_tokens, 'completion_tokens': chunk.usage.completion_tokens}
                     if not chunk.choices:  # some chunks carry only metadata
                         continue
-                    text = chunk.choices[0].delta.content or ''  # content can be None
-                    print(text, end='', flush=True)
-                    parts.append(text)
+                    delta = chunk.choices[0].delta
+                    flare.think(getattr(delta, 'reasoning_content', None) or '')  # local models may stream reasoning first
+                    flare.write(delta.content or '')  # content can be None
         except KeyboardInterrupt:
             interrupted = True
 
         if interrupted:
-            hint = ' use /continue to finish the reply' if parts else ''
-            print(f'\n\n[interrupted]{hint}')
-        else:
-            print()
+            vibe.notice('warn', 'interrupted', 'use /continue to finish the reply' if flare.text else '')
 
-        if parts:
-            session.append({'role': 'assistant', 'content': ''.join(parts)}, interrupted)
+        if flare.text:
+            session.append({'role': 'assistant', 'content': flare.text}, interrupted, usage=usage)
