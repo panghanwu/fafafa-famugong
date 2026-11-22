@@ -22,7 +22,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
     techs = Tech.load(BLACKSMITH)
     commands = slash.merge(techs)
     client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
-    session_meta = {
+    run = {
         'cwd': str(Path.cwd()),
         'model': settings.model,
         'age': settings.age
@@ -31,12 +31,13 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
 
     # create/load session
     if folder is None:
-        session = Session(home, session_meta, system_prompt)
+        session = Session(home, system_prompt)
     else:
         session = Session.load(folder, system_prompt)
         for message in session.messages[-2:]:  # where we left off
             if message['role'] != 'system':
                 print(('> ' if message['role'] == 'user' else '') + message['content'])
+    session.add_run(run)
 
     while True:
         try:

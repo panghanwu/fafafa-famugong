@@ -9,19 +9,19 @@ from filelock import FileLock, Timeout
 
 
 class Session:
-    def __init__(self, home: Path, meta: dict, system_prompt: str):
+    def __init__(self, home: Path, system_prompt: str):
         self.home = home
-        self.meta = meta
+        self.meta = {}  # a title or run can arrive before _start()
         self.messages = [{'role': 'system', 'content': system_prompt}]
         self.dir = None  # created on the first user message
 
     @classmethod
     def load(cls, folder: Path, system_prompt: str) -> Self:
         """Reopen a saved session, swapping in the current system prompt."""
-        meta = json.loads((folder / 'meta.json').read_text())
-        session = cls(folder.parent.parent, meta, system_prompt)
+        session = cls(folder.parent.parent, system_prompt)
         session._set_paths(folder)
         session._lock()
+        session.meta = json.loads(session.meta_path.read_text())
         with session.current_path.open() as f:
             old = [json.loads(line) for line in f]
         session.messages += [m for m in old if m['role'] != 'system']
@@ -46,12 +46,18 @@ class Session:
         if self.dir is not None:  # otherwise _start() writes it later
             self._write_meta()
 
+    def add_run(self, run: dict):
+        """Record this run's cwd, model and age in meta.json."""
+        now = datetime.now().astimezone().isoformat(timespec='seconds')
+        self.meta.setdefault('runs', []).append({'at': now, **run})
+        if self.dir is not None:  # otherwise _start() writes it later
+            self._write_meta()
+
     def _start(self):
         now = datetime.now().astimezone()
         self._set_paths(self.home / 'sessions' / f'{now:%Y-%m-%dT%H-%M}-{secrets.token_hex(3)}')
         self.dir.mkdir(parents=True)
         self._lock()
-        self.meta = {'started_at': now.isoformat(timespec='seconds'), **self.meta}
         self._write_meta()
         self._append_record(self.messages[0])  # the system prompt
 
