@@ -19,12 +19,19 @@ from rich.table import Table
 from rich.text import Text
 
 from fafafafamugong.schema import SLASH_NAME, Tech
-from fafafafamugong.session import Session, get_session_id
+from fafafafamugong.session import Session, get_context_tokens, get_session_id
+from fafafafamugong.settings import COMPRESS_AT, Settings
 
 console = Console()
 PROMPT = '\n> '  # the plain prompt, used without a terminal
 CODE_THEME = 'monokai'
 SLASH_STYLE = 'bold dim'  # a /name that takes effect, in the input box and when the message is shown again
+CONTEXT_STYLES = [  # the context share on the status line: (share it starts at, style), highest first
+    (COMPRESS_AT, '#e06c75'),  # coral: fa compresses before sending the next message
+    (0.5, '#d19a66'),  # amber: filling up
+    (0, 'dim'),
+]
+IN_USE_STYLE = 'yellow'  # a session another fa holds, in fa --list
 MARKERS = {  # marker per command kind in the completion menu and /help: (symbol, style)
     'builtin': ('●', ''),  # runs inside fa
     'shortcut': ('○', ''),  # gets inserted into the message
@@ -45,19 +52,19 @@ LEVELS = {  # notice level: (symbol, colour)
 STATES = {  # reply state: (label, style)
     'sent': ('sent', 'dim'),  # request out, nothing back yet
     'thinking': ('thinking', 'magenta'),  # reasoning arriving before the reply, e.g. from a local model
-    'writing': ('writing', 'cyan'),  # the reply is streaming
+    'writing': ('wololo', 'cyan'),  # the reply is streaming
 }
 
 
 # Input
 
-def make_reader(home: Path, commands: dict, session: Session, model: str) -> Callable[[str], str]:
+def make_reader(home: Path, commands: dict, session: Session, settings: Settings) -> Callable[[str], str]:
     """
     Return a function that reads one message from the user; read(draft) starts the input box with draft in it.
 
-    commands maps names to built-ins and shortcuts, as slash.merge() builds it. The function raises EOFError (Ctrl+D)
-    or KeyboardInterrupt (Ctrl+C on an empty line) when the user wants to leave.
-    Without a terminal, e.g. piped input, it falls back to plain input() and ignores the draft.
+    commands maps names to built-ins and shortcuts, as slash.merge() builds it; settings gives the status line its model
+    and context limit. The function raises EOFError (Ctrl+D) or KeyboardInterrupt (Ctrl+C on an empty line) when the
+    user wants to leave. Without a terminal, e.g. piped input, it falls back to plain input() and ignores the draft.
     """
     if not sys.stdin.isatty():
         return lambda draft='': input(PROMPT)
@@ -81,7 +88,7 @@ def make_reader(home: Path, commands: dict, session: Session, model: str) -> Cal
     )
 
     def read(draft: str = '') -> str:
-        text = prompt.prompt([('dim', f'\n{_status(session, model)}\n'), ('bold', '> ')], default=draft)
+        text = prompt.prompt([('', '\n'), *_status(session, settings), ('', '\n'), ('bold', '> ')], default=draft)
         if text.strip():
             show_user(text, commands=commands)
         return text
@@ -89,13 +96,25 @@ def make_reader(home: Path, commands: dict, session: Session, model: str) -> Cal
     return read
 
 
-def _status(session: Session, model: str) -> str:
-    """The line above the input: session, title, model and context length."""
-    parts = [get_session_id(session.dir) if session.dir else 'new session', session.meta.get('title'), model]
+def _status(session: Session, settings: Settings) -> list[tuple[str, str]]:
+    """The line above the input as (style, text) fragments: session, title, model and how full the context is."""
+    parts = [get_session_id(session.dir) if session.dir else 'new session', session.meta.get('title'), settings.model]
+    fragments = [('dim', '  '.join(part for part in parts if part))]
     if session.usage:
-        tokens = session.usage['prompt_tokens'] + session.usage['completion_tokens']
-        parts.append(f'context {tokens / 1000:.1f}k tokens' if tokens >= 1000 else f'context {tokens} tokens')
-    return '  '.join(part for part in parts if part)
+        tokens = get_context_tokens(session.usage)
+        share = tokens / settings.context_limit
+        # floored, so the number never reads 80% while the style still says below it
+        context = f'{_format_tokens(tokens)} tokens ({int(share * 100)}%)'
+        style = next(style for start, style in CONTEXT_STYLES if share >= start)
+        fragments += [('dim', '  '), (style, context)]
+    return fragments
+
+
+def _format_tokens(count: int) -> str:
+    """A token count for people: 950, 12.3k, 128k."""
+    if count < 1000:
+        return str(count)
+    return f'{count / 1000:.1f}'.removesuffix('.0') + 'k'
 
 
 def _mark_slashes(text: str, commands: dict, first_line: bool = True) -> list[tuple[str, str]]:
@@ -221,6 +240,25 @@ def show_help(commands: dict, skills: dict[str, Tech]):
     console.print()
     keys = Text('   ').join(Text.assemble((key, 'bold'), (f' {action}', 'dim')) for key, action in KEYS)
     console.print(Text.assemble(('keys', 'bold'), '  ', keys))
+
+
+def render_sessions(rows: list[tuple[str, str, str, str, bool]]) -> str:
+    """
+    The session list as text for a pager: a dim header, then one line per session.
+
+    Each row is (id, last active, context share, title or first message, in use). Colours only on a terminal,
+    so a piped list stays plain.
+    """
+    header = '  '.join(['id'.ljust(6), 'last active'.ljust(16), 'context'.rjust(7), 'title'])
+    lines = [Text(header, style='dim')]
+    for session_id, when, share, preview, busy in rows:
+        line = Text(f'{session_id}  {when}  {share:>7}  {preview}')
+        if busy:
+            line.append('  (in use)', style=IN_USE_STYLE)
+        lines.append(line)
+    with console.capture() as capture:
+        console.print(Text('\n').join(lines), soft_wrap=True)  # the pager wraps long lines, not rich
+    return capture.get().rstrip('\n')
 
 
 def show_user(text: str, clock: bool = True, commands: dict | None = None):

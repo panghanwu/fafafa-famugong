@@ -41,7 +41,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
         session = Session.load(folder, system_prompt)
         vibe.show_resumed(session, commands)
     session.add_run(run)
-    read_input = vibe.make_reader(home, commands, session, settings.model)
+    read_input = vibe.make_reader(home, commands, session, settings)
     draft = ''  # a message that got no reply, offered again in the input box
 
     while True:

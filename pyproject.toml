@@ -7,7 +7,8 @@ name = 'fafafa-famugong'
 version = '0.0.1'
 requires-python = '>=3.12'
 authors = [{name = 'panghanwu', email = 'keyboywu@gmail.com'}]
-dependencies = ['filelock', 'openai', 'prompt_toolkit', 'pydantic', 'rich']
+# prompt_toolkit 3.0.52 is the first release with the dim style
+dependencies = ['filelock', 'openai', 'prompt_toolkit>=3.0.52', 'pydantic', 'rich']
 
 [project.scripts]
 fa = 'fafafafamugong.cli:main'

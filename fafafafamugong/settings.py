@@ -3,9 +3,10 @@ import tomllib
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 CONFIG_NAME = 'config.toml'
+COMPRESS_AT = 0.8  # share of context_limit where fa compresses before sending
 NOT_IN_CONFIG = {  # settings that come from elsewhere: name -> where
     'llm_api_key': 'run fa --login to enter it',
     'age': 'pick it with fa --age',
@@ -24,11 +25,23 @@ class Settings(BaseModel):
     # From config.toml, or admin.toml in team mode; descriptions go into config.toml
     llm_base_url: str = Field('http://localhost:4000', description='The LiteLLM proxy every request goes to')
     model: str = Field('gpt-oss-120b', description='The model that does the work, by its name on the proxy')
+    context_limit: int = Field(128000, gt=0, description='How many tokens the model can hold, the prompt and the reply together')
+
+
+def load_settings(home: Path, **values) -> Settings:
+    """Settings from config.toml plus the values fa works out itself; a bad config.toml ends fa with a readable message."""
+    try:
+        return Settings(**read_config(home), **values)
+    except ValidationError as e:
+        problems = '\n'.join(f'  {error['loc'][0]}: {error['msg']}' for error in e.errors())
+        sys.exit(f'{home / CONFIG_NAME}:\n{problems}')
 
 
 def read_config(home: Path) -> dict:
-    """The settings in <home>/config.toml, which setup() writes on the first run."""
+    """The settings in <home>/config.toml, which setup() writes on the first run; none before that."""
     path = home / CONFIG_NAME
+    if not path.exists():
+        return {}
     try:
         config = tomllib.loads(path.read_text())
     except tomllib.TOMLDecodeError as e:
@@ -39,11 +52,11 @@ def read_config(home: Path) -> dict:
     return config
 
 
-def make_config(values: dict[str, str]) -> str:
+def make_config(values: dict[str, str | int]) -> str:
     """config.toml with every setting it may hold: the given values, defaults for the rest."""
     lines = ['# fa settings. The access key is not kept here: run fa --login to enter a new one.']
     for name, field in Settings.model_fields.items():
         if name in NOT_IN_CONFIG:
             continue
-        lines += ['', f'# {field.description}', f"{name} = '{values.get(name, field.default)}'"]  # every setting is a string so far
+        lines += ['', f'# {field.description}', f'{name} = {values.get(name, field.default)!r}']  # repr gives valid TOML for str and int
     return '\n'.join(lines) + '\n'

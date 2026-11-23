@@ -7,11 +7,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import get_args
 
-from pydantic import ValidationError
-
+from fafafafamugong import vibe
 from fafafafamugong.access import login, read_key, setup
-from fafafafamugong.session import find_sessions, get_last_active, get_preview, get_session_id, is_in_use
-from fafafafamugong.settings import CONFIG_NAME, Settings, read_config
+from fafafafamugong.session import (find_sessions, get_context_tokens, get_last_active, get_last_usage, get_preview,
+                                    get_session_id, is_in_use)
+from fafafafamugong.settings import CONFIG_NAME, Settings, load_settings
 from fafafafamugong.wololo import chat
 
 
@@ -35,7 +35,7 @@ def main():
         if not folders:
             sys.exit('no sessions yet')
         os.environ.setdefault('LESS', 'FRX')  # like git: no pager if it fits on one screen
-        pydoc.pager(format_sessions(folders) + '\n')
+        pydoc.pager(format_sessions(folders, load_settings(home).context_limit) + '\n')
         return
 
     folder = None
@@ -44,17 +44,14 @@ def main():
         if not folders:
             sys.exit('no matching session')
         if args.resume and len(folders) > 1:  # bare --resume just takes the latest
-            sys.exit(f'several sessions match {args.resume}:\n{format_sessions(folders)}')
+            listing = format_sessions(folders, load_settings(home).context_limit)
+            sys.exit(f'several sessions match {args.resume}:\n{listing}')
         folder = folders[0]
 
     if not (home / CONFIG_NAME).exists():  # first run
         setup(home)
         return
-    try:
-        settings = Settings(**read_config(home), llm_api_key=read_key(home), age=args.age)
-    except ValidationError as e:
-        problems = '\n'.join(f'  {error['loc'][0]}: {error['msg']}' for error in e.errors())
-        sys.exit(f'{home / CONFIG_NAME}:\n{problems}')
+    settings = load_settings(home, llm_api_key=read_key(home), age=args.age)
     if args.login or settings.llm_api_key is None:
         settings.llm_api_key = login(settings.llm_base_url, home)
         if args.login:
@@ -62,13 +59,15 @@ def main():
     chat(settings, home, folder)
 
 
-def format_sessions(folders: list[Path]) -> str:
-    lines = []
+def format_sessions(folders: list[Path], context_limit: int) -> str:
+    """One row per session: ID, last active, how full its context is, its title or first message, and if it is in use."""
+    rows = []
     for folder in folders:
         when = datetime.fromtimestamp(get_last_active(folder)).strftime('%Y-%m-%d %H:%M')
-        busy = '  (in use)' if is_in_use(folder) else ''
-        lines.append(f'{get_session_id(folder)}  {when}  {shorten(get_preview(folder))}{busy}')
-    return '\n'.join(lines)
+        usage = get_last_usage(folder)
+        share = f'{int(get_context_tokens(usage) / context_limit * 100)}%' if usage else ''  # floored like the status line
+        rows.append((get_session_id(folder), when, share, shorten(get_preview(folder)), is_in_use(folder)))
+    return vibe.render_sessions(rows)
 
 
 def shorten(text: str, width: int = 50) -> str:

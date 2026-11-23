@@ -27,9 +27,7 @@ class Session:
         with session.current_path.open() as f:
             old = [json.loads(line) for line in f]
         session.messages += [m for m in old if m['role'] != 'system']
-        with session.full_path.open() as f:
-            records = [json.loads(line) for line in f]
-        session.usage = next((r['usage'] for r in reversed(records) if 'usage' in r), None)
+        session.usage = get_last_usage(folder)
 
         # update full.jsonl
         record = {'ts': datetime.now().astimezone().isoformat(), 'message': session.messages[0], 'resumed': True}
@@ -144,6 +142,18 @@ def get_session_id(folder: Path) -> str:
 
 def get_last_active(folder: Path) -> float:
     return (folder / 'full.jsonl').stat().st_mtime
+
+
+def get_last_usage(folder: Path) -> dict | None:
+    """Token usage of the last reply that reported one, from full.jsonl."""
+    with (folder / 'full.jsonl').open() as f:
+        records = [json.loads(line) for line in f]
+    return next((r['usage'] for r in reversed(records) if 'usage' in r), None)
+
+
+def get_context_tokens(usage: dict) -> int:
+    """How many tokens the conversation held after that reply: what was sent plus what came back."""
+    return usage['prompt_tokens'] + usage['completion_tokens']
 
 
 def is_in_use(folder: Path) -> bool:
