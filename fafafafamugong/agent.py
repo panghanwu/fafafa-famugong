@@ -106,7 +106,9 @@ def explain(error: openai.APIError, base_url: str) -> tuple[str, str, str]:
         case openai.APIConnectionError():
             return 'error', 'connection failed', f'is the proxy at {base_url} running?'
         case openai.AuthenticationError():
-            return 'error', 'unauthorized', 'check your access token'
+            return 'error', 'unauthorized', 'run fa --login to enter a new key'
+        case openai.BadRequestError() if 'Invalid model name' in error.message:  # LiteLLM's words; it has no error code for this
+            return 'error', 'unknown model', 'not on the proxy; check model in config.toml'
         case openai.RateLimitError():
             return 'warn', 'rate limited', 'wait a moment and try again'
         case openai.APIStatusError():

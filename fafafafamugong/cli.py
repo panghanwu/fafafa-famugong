@@ -5,20 +5,25 @@ import sys
 import unicodedata
 from datetime import datetime
 from pathlib import Path
+from typing import get_args
 
 from pydantic import ValidationError
 
+from fafafafamugong.access import login, read_key, setup
 from fafafafamugong.agent import chat
 from fafafafamugong.session import find_sessions, get_last_active, get_preview, get_session_id, is_in_use
-from fafafafamugong.settings import REPO_ENV, Settings
+from fafafafamugong.settings import CONFIG_NAME, Settings, read_config
 
 
 def main():
     parser = argparse.ArgumentParser(prog='fa')
     parser.add_argument('-H', '--home', type=Path, help='where fa keeps its data (default: $FA_HOME or ~/.famugong)')  # -h is --help
+    ages = get_args(Settings.model_fields['age'].annotation)  # the Literal in Settings is the one list of playable ages
+    parser.add_argument('--age', choices=ages, default='dark', help='the age to play in (default: dark)')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-l', '--list', action='store_true', help='list sessions, latest first')
     group.add_argument('-r', '--resume', nargs='?', const='', metavar='ID', help='resume the latest session, or one by ID')
+    group.add_argument('--login', action='store_true', help='enter a new access key')
     args = parser.parse_args()
 
     home = args.home or Path(os.environ.get('FA_HOME') or Path.home() / '.famugong')
@@ -42,10 +47,18 @@ def main():
             sys.exit(f'several sessions match {args.resume}:\n{format_sessions(folders)}')
         folder = folders[0]
 
+    if not (home / CONFIG_NAME).exists():  # first run
+        setup(home)
+        return
     try:
-        settings = Settings()
+        settings = Settings(**read_config(home), llm_api_key=read_key(home), age=args.age)
     except ValidationError as e:
-        sys.exit(f'{e}\n\nsettings file: {REPO_ENV}')
+        problems = '\n'.join(f'  {error['loc'][0]}: {error['msg']}' for error in e.errors())
+        sys.exit(f'{home / CONFIG_NAME}:\n{problems}')
+    if args.login or settings.llm_api_key is None:
+        settings.llm_api_key = login(settings.llm_base_url, home)
+        if args.login:
+            return
     chat(settings, home, folder)
 
 

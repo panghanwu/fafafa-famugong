@@ -7,7 +7,7 @@ name = 'fafafa-famugong'
 version = '0.0.1'
 requires-python = '>=3.12'
 authors = [{name = 'panghanwu', email = 'keyboywu@gmail.com'}]
-dependencies = ['filelock', 'openai', 'prompt_toolkit', 'pydantic-settings', 'rich']
+dependencies = ['filelock', 'openai', 'prompt_toolkit', 'pydantic', 'rich']
 
 [project.scripts]
 fa = 'fafafafamugong.cli:main'
