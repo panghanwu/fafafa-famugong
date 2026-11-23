@@ -9,6 +9,10 @@ from typing import Self
 from filelock import FileLock, Timeout
 
 
+class SessionError(Exception):
+    """A session file that cannot be read, e.g. a line cut short by a crash."""
+
+
 class Session:
     def __init__(self, home: Path, system_prompt: str):
         self.home = home
@@ -23,9 +27,8 @@ class Session:
         session = cls(folder.parent.parent, system_prompt)
         session._set_paths(folder)
         session._lock()
-        session.meta = json.loads(session.meta_path.read_text())
-        with session.current_path.open() as f:
-            old = [json.loads(line) for line in f]
+        session.meta = _read_json(session.meta_path)
+        old = _read_jsonl(session.current_path)
         session.messages += [m for m in old if m['role'] != 'system']
         session.usage = get_last_usage(folder)
 
@@ -70,8 +73,7 @@ class Session:
         replaced = cut - 1
         self.messages[1:cut] = [message]
         if rate is not None:
-            tokens = round(rate * count_chars(self.messages[:_last_reply(self.messages) + 1]))
-            self.usage = {'prompt_tokens': tokens, 'completion_tokens': 0, 'estimated': True}
+            self._rescale_usage(rate)
         self.meta['compressions'] = self.meta.get('compressions', 0) + 1
         self._write_meta()
         record = {'ts': datetime.now().astimezone().isoformat(), 'message': message, 'compressed': replaced}
@@ -90,6 +92,24 @@ class Session:
         self._append_jsonl(self.full_path, record)
         self._rewrite_current()
 
+    def rollback(self, start: int):
+        """Take back the last turn, messages[start:]; full.jsonl keeps a record of it."""
+        rate = self._tokens_per_char() if self.usage is not None else None
+        removed = self.messages[start:]
+        del self.messages[start:]
+        if not any(m['role'] == 'user' for m in self.messages):  # it was the only turn: no session left
+            self._discard()
+            return
+        if rate is not None:
+            self._rescale_usage(rate)
+        now = datetime.now().astimezone().isoformat()
+        records = [{'ts': now, 'message': m, 'rolled_back': True} for m in removed]
+        if self.usage is not None:
+            records[-1]['usage'] = self.usage  # a resume reads the last usage in full.jsonl
+        for record in records:
+            self._append_jsonl(self.full_path, record)
+        self._rewrite_current()
+
     def _start(self):
         now = datetime.now().astimezone()
         self._set_paths(self.home / 'sessions' / f'{now:%Y-%m-%dT%H-%M}-{secrets.token_hex(3)}')
@@ -103,11 +123,17 @@ class Session:
         self.lock.release()  # before deleting, so the lock file is not held open
         shutil.rmtree(self.dir)
         self.dir = None
+        self.usage = None
 
     def _tokens_per_char(self) -> float:
         """Tokens per character, from the last reply's usage."""
         replied = self.messages[:_last_reply(self.messages) + 1]
         return get_context_tokens(self.usage) / count_chars(replied)
+
+    def _rescale_usage(self, rate: float):
+        """After messages are taken out: estimate the usage at the same tokens per character, until the next reply."""
+        tokens = round(rate * count_chars(self.messages[:_last_reply(self.messages) + 1]))
+        self.usage = {'prompt_tokens': tokens, 'completion_tokens': 0, 'estimated': True}
 
     def _set_paths(self, folder: Path):
         self.dir = folder
@@ -174,8 +200,7 @@ def get_last_active(folder: Path) -> float:
 
 def get_last_usage(folder: Path) -> dict | None:
     """Token usage of the last reply that reported one, from full.jsonl."""
-    with (folder / 'full.jsonl').open() as f:
-        records = [json.loads(line) for line in f]
+    records = _read_jsonl(folder / 'full.jsonl')
     return next((r['usage'] for r in reversed(records) if 'usage' in r), None)
 
 
@@ -206,10 +231,27 @@ def is_in_use(folder: Path) -> bool:
 
 def get_preview(folder: Path) -> str:
     """Title, or the first message the user typed."""
-    meta = json.loads((folder / 'meta.json').read_text())
+    meta = _read_json(folder / 'meta.json')
     if 'title' in meta:
         return meta['title']
-    with (folder / 'full.jsonl').open() as f:  # current.jsonl may open with a summary instead
-        records = (json.loads(line) for line in f)
-        typed = (r['message']['content'] for r in records if r['message']['role'] == 'user' and 'compressed' not in r)
-        return next(typed, '(empty)')
+    records = _read_jsonl(folder / 'full.jsonl')  # current.jsonl may open with a summary instead
+    typed = (r['message']['content'] for r in records if r['message']['role'] == 'user' and 'compressed' not in r)
+    return next(typed, '(empty)')
+
+
+def _read_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError as e:
+        raise SessionError(path.name) from e
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    records = []
+    with path.open() as f:
+        for number, line in enumerate(f, 1):
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                raise SessionError(f'{path.name} line {number}') from e
+    return records

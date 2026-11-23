@@ -9,8 +9,8 @@ from typing import get_args
 
 from fafafafamugong import log, vibe
 from fafafafamugong.access import login, read_key, setup
-from fafafafamugong.session import (find_sessions, get_context_tokens, get_last_active, get_last_usage, get_preview,
-                                    get_session_id, is_in_use)
+from fafafafamugong.session import (SessionError, find_sessions, get_context_tokens, get_last_active, get_last_usage,
+                                    get_preview, get_session_id, is_in_use)
 from fafafafamugong.settings import CONFIG_NAME, Settings, load_settings
 from fafafafamugong.wololo import chat
 
@@ -66,9 +66,13 @@ def format_sessions(folders: list[Path], context_limit: int) -> str:
     rows = []
     for folder in folders:
         when = datetime.fromtimestamp(get_last_active(folder)).strftime('%Y-%m-%d %H:%M')
-        usage = get_last_usage(folder)
+        try:
+            usage = get_last_usage(folder)
+            preview = shorten(get_preview(folder))
+        except SessionError as e:
+            usage, preview = None, f'(damaged: {e})'
         share = f'{int(get_context_tokens(usage) / context_limit * 100)}%' if usage else ''  # floored like the status line
-        rows.append((get_session_id(folder), when, share, shorten(get_preview(folder)), is_in_use(folder)))
+        rows.append((get_session_id(folder), when, share, preview, is_in_use(folder)))
     return vibe.render_sessions(rows)
 
 

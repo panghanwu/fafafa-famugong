@@ -21,6 +21,7 @@ from fafafafamugong import __version__
 from fafafafamugong.schema import SLASH_NAME, Tech
 from fafafafamugong.session import Session, get_context_tokens, get_session_id
 from fafafafamugong.settings import COMPRESS_AT, Settings
+from fafafafamugong.tags import PromptTag, is_marked
 
 console = Console()
 PROMPT = '\n> '  # the plain prompt, used without a terminal
@@ -206,6 +207,16 @@ def notice(level: str, tag: str, text: str = ''):
     console.print(Text.assemble((f'{symbol} {tag}', f'bold {colour}'), (f'  {text}' if text else '', 'dim')))
 
 
+def confirm(question: str) -> bool:
+    """Ask a yes-or-no question; anything but y is no."""
+    symbol, colour = LEVELS['warn']
+    try:
+        answer = PromptSession().prompt([(f'bold ansi{colour}', f'{symbol} {question}'), ('', ' [y/N] ')])
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return answer.strip().lower() in ('y', 'yes')
+
+
 def show_help(commands: dict, skills: dict[str, Tech]):
     """What can be typed or used, one section per kind, then the keys; columns line up across sections."""
     rows = {kind: [] for kind in HELP_SECTIONS}  # kind -> [(name, aliases, description, usage)]
@@ -274,8 +285,12 @@ def show_resumed(session: Session, commands: dict | None = None):
     """Say which session is back and show where it left off."""
     console.print()
     notice('info', 'resumed', '  '.join(part for part in [get_session_id(session.dir), session.meta.get('title')] if part))
+    show_last_turn(session, commands)
+
+
+def show_last_turn(session: Session, commands: dict | None = None):
     for message in session.messages[-2:]:
-        if message['role'] == 'user':
+        if message['role'] == 'user' and not is_marked(message['content'], PromptTag.COMPRESSED):
             show_user(message['content'], clock=False, commands=commands)
         elif message['role'] == 'assistant':
             _header('fa', 'blue')
@@ -364,10 +379,13 @@ class Busy:
         yield Indent(self._spinner)
 
 
-def show_compressed(before: int, after: int):
-    """Show how much compression saved."""
-    saved = 1 - after / before
-    notice('ok', 'compressed', f'{saved:.0%} smaller  ~{_format_tokens(before)} → ~{_format_tokens(after)} tokens')
+def show_compressed(before: int, after: int, low: bool = False):
+    """Show how much compression saved; when low, suggest a new session."""
+    text = f'{1 - after / before:.0%} smaller  ~{_format_tokens(before)} → ~{_format_tokens(after)} tokens'
+    if low:
+        notice('warn', 'compressed', f'{text}; consider a new session')
+    else:
+        notice('ok', 'compressed', text)
 
 
 def _header(name: str, colour: str, *details: str):

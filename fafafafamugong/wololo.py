@@ -1,4 +1,5 @@
 """The main agent: the chat loop that reads your messages, sends them to the model and shows the replies."""
+import sys
 from pathlib import Path
 
 import openai
@@ -6,7 +7,7 @@ from openai import OpenAI
 
 from fafafafamugong import catzor, log, slash, vibe
 from fafafafamugong.schema import BLACKSMITH, TOWN_CENTER, Age, Tech
-from fafafafamugong.session import Session
+from fafafafamugong.session import Session, SessionError, get_session_id
 from fafafafamugong.settings import COMPRESS_AT, Settings
 from fafafafamugong.tags import describe_tags
 
@@ -38,7 +39,11 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
     if folder is None:
         session = Session(home, system_prompt)
     else:
-        session = Session.load(folder, system_prompt)
+        try:
+            session = Session.load(folder, system_prompt)
+        except SessionError as e:
+            log.record('resume', e, folder=folder.name)
+            sys.exit(f'session {get_session_id(folder)} is damaged: {e}')
         vibe.show_resumed(session, commands)
     session.add_run(run)
     log.watch(session, settings)
@@ -116,7 +121,7 @@ def compress_if_full(session: Session, client: OpenAI, settings: Settings):
         return
     cut = catzor.find_cut(session.messages)
     if cut is None:
-        vibe.notice('warn', 'context nearly full', f'nothing to compress: the last {catzor.MIN_RAW_TURNS} turns stay word for word')
+        vibe.notice('warn', 'context nearly full', 'nothing to compress; consider a new session')
         return
     try:
         with vibe.Busy('compressing'):
@@ -130,7 +135,8 @@ def compress_if_full(session: Session, client: OpenAI, settings: Settings):
         vibe.notice('warn', 'compression failed', str(e))
         return
     session.compress(cut, summary)
-    vibe.show_compressed(before, session.estimate_tokens())
+    after = session.estimate_tokens()
+    vibe.show_compressed(before, after, low=1 - after / before < catzor.MIN_SAVING)
 
 
 def explain(error: openai.APIError, base_url: str) -> tuple[str, str, str]:

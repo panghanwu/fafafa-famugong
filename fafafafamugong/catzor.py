@@ -5,7 +5,8 @@ from fafafafamugong.schema import BLACKSMITH, Tech
 from fafafafamugong.tags import PromptTag, is_marked, mark_text
 
 COMPRESS = 'compress'  # the job's name in blacksmith.toml
-COMPRESS_SHARE = 0.6  # share of the conversation, by length, to summarize
+COMPRESS_SHARE = 0.8  # share of the conversation, by length, to summarize
+MIN_SAVING = 0.2  # a compression that saves less suggests a new session
 MIN_RAW_TURNS = 3  # latest turns kept word for word
 
 

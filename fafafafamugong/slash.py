@@ -43,6 +43,27 @@ def _rename(session: Session, args: str):
     vibe.notice('ok', 'renamed', args)
 
 
+@builtin('rollback', 'Remove the last turn')
+def _rollback(session: Session, args: str):
+    users = [i for i, m in enumerate(session.messages) if m['role'] == 'user']
+    if not users:
+        vibe.notice('warn', 'nothing to roll back')
+        return
+    start = users[-1]
+    if is_marked(session.messages[start]['content'], PromptTag.COMPRESSED):
+        vibe.notice('warn', 'cannot roll back', 'earlier turns were compressed')
+        return
+    only = len(users) == 1
+    if not vibe.confirm('roll back the only turn? the session will be deleted' if only else 'roll back the last turn?'):
+        return
+    session.rollback(start)
+    if only:
+        vibe.notice('ok', 'rolled back', 'nothing left, so the session was deleted')
+        return
+    vibe.notice('ok', 'rolled back', 'continuing from:')
+    vibe.show_last_turn(session)
+
+
 @builtin('help', 'List commands, shortcuts and skills', aliases=('h',))
 def _help(session: Session, args: str):
     techs = Tech.load(BLACKSMITH)
