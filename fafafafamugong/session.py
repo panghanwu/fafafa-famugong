@@ -35,8 +35,7 @@ class Session:
         session._append_jsonl(session.full_path, record)
 
         # update current.jsonl
-        text = ''.join(json.dumps(m, ensure_ascii=False) + '\n' for m in session.messages)
-        session._write_atomic(session.current_path, text)
+        session._rewrite_current()
         return session
 
     def append(self, message: dict, interrupted: bool = False, usage: dict | None = None):
@@ -58,6 +57,13 @@ class Session:
         self.meta.setdefault('runs', []).append({'at': now, **run})
         if self.dir is not None:  # otherwise _start() writes it later
             self._write_meta()
+
+    def retract(self):
+        """Take back the last message, e.g. one that never got a reply; full.jsonl keeps a record of it."""
+        message = self.messages.pop()
+        record = {'ts': datetime.now().astimezone().isoformat(), 'message': message, 'retracted': True}
+        self._append_jsonl(self.full_path, record)
+        self._rewrite_current()
 
     def _start(self):
         now = datetime.now().astimezone()
@@ -82,6 +88,11 @@ class Session:
 
     def _write_meta(self):
         self._write_atomic(self.meta_path, json.dumps(self.meta, ensure_ascii=False, indent=2) + '\n')
+
+    def _rewrite_current(self):
+        """Make current.jsonl match messages again, after a change other than an append."""
+        text = ''.join(json.dumps(m, ensure_ascii=False) + '\n' for m in self.messages)
+        self._write_atomic(self.current_path, text)
 
     def _append_record(self, message: dict, interrupted: bool = False, usage: dict | None = None):
         record = {'ts': datetime.now().astimezone().isoformat(), 'message': message}

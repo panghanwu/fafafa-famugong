@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import openai
 from openai import OpenAI
 
 from fafafafamugong import slash, vibe
@@ -40,12 +41,14 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
         vibe.show_resumed(session, commands)
     session.add_run(run)
     read_input = vibe.make_reader(home, commands, session, settings.model)
+    draft = ''  # a message that got no reply, offered again in the input box
 
     while True:
         try:
-            user = read_input()
+            user = read_input(draft)
         except (EOFError, KeyboardInterrupt):
             break
+        draft = ''
         if not user.strip():
             continue
 
@@ -57,6 +60,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
         flare = vibe.Flare(settings.model)
         usage = None
         interrupted = False
+        error = None
         try:
             with (
                 flare,
@@ -77,9 +81,35 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
                     flare.write(delta.content or '')  # content can be None
         except KeyboardInterrupt:
             interrupted = True
+        except openai.APIError as e:  # every API failure, from a dead proxy to a bad token
+            error = e
 
-        if interrupted:
-            vibe.notice('warn', 'interrupted', 'use /continue to finish the reply' if flare.text else '')
-
+        stopped = interrupted or error is not None
+        if error is not None:
+            vibe.notice(*explain(error, settings.llm_base_url))
         if flare.text:
-            session.append({'role': 'assistant', 'content': flare.text}, interrupted, usage=usage)
+            session.append({'role': 'assistant', 'content': flare.text}, stopped, usage=usage)
+            if stopped:
+                vibe.notice('warn', 'interrupted', 'use /continue to finish the reply')
+        elif stopped:  # nothing came back: take the message back and offer it again
+            session.retract()
+            draft = user
+            if interrupted:
+                vibe.notice('warn', 'interrupted', 'your message is back in the input box')
+
+
+def explain(error: openai.APIError, base_url: str) -> tuple[str, str, str]:
+    """Turn an API error into a notice: (level, tag, text)."""
+    match error:
+        case openai.APITimeoutError():  # before APIConnectionError, which it subclasses
+            return 'error', 'timed out', 'try again'
+        case openai.APIConnectionError():
+            return 'error', 'connection failed', f'is the proxy at {base_url} running?'
+        case openai.AuthenticationError():
+            return 'error', 'unauthorized', 'check your access token'
+        case openai.RateLimitError():
+            return 'warn', 'rate limited', 'wait a moment and try again'
+        case openai.APIStatusError():
+            detail = error.body.get('message') if isinstance(error.body, dict) else None  # the server's own words
+            return 'error', f'error {error.status_code}', detail or error.message
+    return 'error', 'request failed', str(error)

@@ -43,16 +43,16 @@ STATES = {  # reply state: (label, style)
 
 # Input
 
-def make_reader(home: Path, commands: dict, session: Session, model: str) -> Callable[[], str]:
+def make_reader(home: Path, commands: dict, session: Session, model: str) -> Callable[[str], str]:
     """
-    Return a function that reads one message from the user.
+    Return a function that reads one message from the user; read(draft) starts the input box with draft in it.
 
     commands maps names to built-ins and shortcuts, as slash.merge() builds it. The function raises EOFError (Ctrl+D)
     or KeyboardInterrupt (Ctrl+C on an empty line) when the user wants to leave.
-    Without a terminal, e.g. piped input, it falls back to plain input().
+    Without a terminal, e.g. piped input, it falls back to plain input() and ignores the draft.
     """
     if not sys.stdin.isatty():
-        return lambda: input(PROMPT)
+        return lambda draft='': input(PROMPT)
     menu = {}  # name -> (kind, description)
     for name, command in sorted(commands.items(), key=lambda item: isinstance(item[1], Tech)):  # built-ins first
         if isinstance(command, Tech):
@@ -72,8 +72,8 @@ def make_reader(home: Path, commands: dict, session: Session, model: str) -> Cal
         placeholder=[('dim', 'Type a message')],  # shown while the box is empty
     )
 
-    def read() -> str:
-        text = prompt.prompt([('dim', f'\n{_status(session, model)}\n'), ('bold', '> ')])
+    def read(draft: str = '') -> str:
+        text = prompt.prompt([('dim', f'\n{_status(session, model)}\n'), ('bold', '> ')], default=draft)
         if text.strip():
             show_user(text, commands=commands)
         return text
