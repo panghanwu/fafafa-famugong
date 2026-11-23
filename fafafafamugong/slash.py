@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -14,6 +15,7 @@ class BuiltinCommand:
 
 
 BUILTINS: dict[str, BuiltinCommand] = {}  # aliases are keys too, pointing to the same command
+NAME = re.compile(r'(?<!\S)/([\w-]+)(?![\w/-])')  # a /name standing alone, not part of a path like /usr/bin
 
 
 def builtin(name: str, description: str, aliases: tuple[str, ...] = ()):
@@ -26,8 +28,8 @@ def builtin(name: str, description: str, aliases: tuple[str, ...] = ()):
     return register
 
 
-@builtin('exit', 'Leave the chat', aliases=('q',))
-def _exit(session: Session, args: str):
+@builtin('quit', 'Leave the chat', aliases=('q',))
+def _quit(session: Session, args: str):
     raise SystemExit
 
 
@@ -50,7 +52,11 @@ def _help(session: Session, args: str):
     shortcuts = [(f'/{n}', t.description) for n, t in techs.items() if t.type == 'shortcut' and n not in BUILTINS]
     skills = [(n, t.description) for n, t in techs.items() if t.type == 'skill']
     width = max(len(label) for label, _ in commands + shortcuts + skills)
-    for title, rows in [('commands', commands), ('shortcuts', shortcuts), ('skills (used by the model)', skills)]:
+    for title, rows in [
+        ('commands', commands),
+        ('shortcuts (anywhere in a message)', shortcuts),
+        ('skills (used by the model)', skills),
+    ]:
         if rows:
             print(f'{title}:')
             for label, description in rows:
@@ -58,13 +64,11 @@ def _help(session: Session, args: str):
 
 
 def parse(text: str) -> tuple[str, str] | None:
-    """Split '/name args' into (name, args); None if text is not a command."""
-    if not text.startswith('/'):
+    """Split '/name args' into (name, args); None if text does not start with a /name."""
+    match = NAME.match(text)
+    if match is None:
         return None
-    name, _, args = text[1:].partition(' ')
-    if not name or '/' in name:  # a bare '/' or a path like /usr/bin
-        return None
-    return name, args.strip()
+    return match[1], text[match.end():].strip()
 
 
 def merge(techs: dict[str, Tech]) -> dict[str, BuiltinCommand | Tech]:
@@ -73,16 +77,24 @@ def merge(techs: dict[str, Tech]) -> dict[str, BuiltinCommand | Tech]:
     return {**shortcuts, **BUILTINS}  # built-ins win over shortcuts
 
 
-def dispatch(name: str, args: str, commands: dict[str, BuiltinCommand | Tech], session: Session) -> str | None:
-    """Run a command. Return text to send to the model, or None."""
-    command = commands.get(name)
-    if command is None:
-        vibe.notice('error', 'unknown command', f'/{name}')
-        return None
-    if isinstance(command, BuiltinCommand):
-        command.fn(session, args)
-        return None
-    text = command.prompt.strip()
-    if args:
-        text += f'\n\nARGUMENTS: {args}'  # same format as Claude Code skills
-    return text
+def dispatch(text: str, commands: dict[str, BuiltinCommand | Tech], session: Session) -> str | None:
+    """Run a built-in, or expand shortcuts. Return text to send to the model, or None."""
+    command = parse(text)
+    if command is not None:  # only the start of a message can be a command
+        name, args = command
+        target = commands.get(name)
+        if target is None:
+            vibe.notice('error', 'unknown command', f'/{name}')
+            return None
+        if isinstance(target, BuiltinCommand):
+            target.fn(session, args)
+            return None
+    return expand(text, commands)
+
+
+def expand(text: str, commands: dict[str, BuiltinCommand | Tech]) -> str:
+    """Replace every /name of a shortcut with its prompt, wherever it appears; other words stay as they are."""
+    def replace(match: re.Match) -> str:
+        command = commands.get(match[1])
+        return command.prompt.strip() if isinstance(command, Tech) else match[0]
+    return NAME.sub(replace, text)

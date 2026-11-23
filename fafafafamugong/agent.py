@@ -46,11 +46,9 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
         if not user.strip():
             continue
 
-        command = slash.parse(user)
-        if command is not None:
-            user = slash.dispatch(*command, commands, session)
-            if user is None:  # handled locally, nothing to send
-                continue
+        user = slash.dispatch(user, commands, session)
+        if user is None:  # handled locally, nothing to send
+            continue
 
         session.append({'role': 'user', 'content': user})
         flare = vibe.Flare(settings.model)

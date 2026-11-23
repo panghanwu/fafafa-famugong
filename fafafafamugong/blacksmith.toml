@@ -1,14 +1,8 @@
 [brief]
 type = 'shortcut'
-description = 'Reply shortly, in a few sentences.'
+description = 'Reply in at most 6 sentences.'
 prompt = '''
-Reply shortly, in no more than 5 sentences by default. Lead with the answer, since preamble and pleasantries only delay it. Leave out background the user did not ask for; if they need it, they will pull for it.
-
-## Flags
-
-Only these count as flags; anything else is part of the content.
-
-- `-n N` — at most N sentences.
+Reply in at most 6 sentences. Lead with the answer and leave out preamble and background the user did not ask for.
 '''
 
 [continue]

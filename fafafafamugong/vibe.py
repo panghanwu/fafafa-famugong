@@ -21,9 +21,9 @@ from fafafafamugong.session import Session, get_session_id
 console = Console()
 PROMPT = '\n> '  # the plain prompt, used without a terminal
 CODE_THEME = 'monokai'
-MARKERS = {  # completion menu marker per command kind: (symbol, style)
-    'builtin': ('!', 'fg:ansiyellow'),  # runs inside fa
-    'shortcut': ('>', 'fg:ansicyan'),  # becomes a message to the model
+MARKERS = {  # completion menu marker per command kind: (symbol, style); the menu's own colours keep them readable
+    'builtin': ('●', ''),  # runs inside fa
+    'shortcut': ('○', ''),  # gets inserted into the message
 }
 LEVELS = {  # notice level: (symbol, colour)
     'info': ('›', 'blue'),
@@ -86,17 +86,20 @@ def _status(session: Session, model: str) -> str:
 
 
 class SlashCompleter(Completer):
-    """Suggest command names while the input is '/' plus part of a name."""
+    """Suggest names while the word being typed is '/' plus part of a name: shortcuts anywhere, built-ins at the start."""
 
     def __init__(self, menu: dict[str, tuple[str, str]]):
         self.menu = menu  # name -> (kind, description)
 
     def get_completions(self, document, complete_event):
-        text = document.text_before_cursor
-        if not text.startswith('/') or ' ' in text:  # plain chat, or already typing arguments
+        word = document.get_word_before_cursor(WORD=True)  # the run of non-spaces right before the cursor
+        if not word.startswith('/'):
             return
-        typed = text[1:]
+        at_start = document.text_before_cursor.lstrip() == word
+        typed = word[1:]
         for name, (kind, description) in self.menu.items():
+            if kind == 'builtin' and not at_start:  # built-ins only run from the start of a message
+                continue
             if name.startswith(typed):
                 symbol, style = MARKERS[kind]
                 yield Completion(
