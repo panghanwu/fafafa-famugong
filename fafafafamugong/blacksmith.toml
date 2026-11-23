@@ -1,10 +1,3 @@
-[brief]
-type = 'shortcut'
-description = 'Reply in at most 6 sentences.'
-prompt = '''
-Reply in at most 6 sentences. Lead with the answer and leave out preamble and background the user did not ask for.
-'''
-
 [continue]
 type = 'shortcut'
 description = 'Finish the interrupted reply.'
@@ -19,6 +12,31 @@ prompt = '''
 Search this conversation for the passages that match what the user describes in this message, and quote them.
 For each match, say who said it (you or the user) and roughly when (e.g. "your second reply"), then quote the relevant lines exactly in a blockquote.
 Put the closest matches first; if nothing matches, say so plainly. Do not answer or continue the topic itself.
+'''
+
+[brief]
+type = 'shortcut'
+description = 'Reply in at most 6 sentences.'
+prompt = '''
+Reply in at most 6 sentences. Lead with the answer and leave out preamble and background the user did not ask for.
+'''
+
+[detail]
+type = 'shortcut'
+description = 'Reply in as much detail as is useful.'
+prompt = '''
+Reply in full detail: cover the reasoning, steps, examples, edge cases and caveats the user may need.
+Before you finish, reflect on what is still missing, such as skipped steps, exceptions, alternatives, or the follow-up questions the user is likely to ask next, and add it.
+Stay accurate and do not pad: no filler, no repeating yourself.
+'''
+
+[recap]
+type = 'shortcut'
+description = 'Sum up what this conversation has covered so far.'
+prompt = '''
+Recap this conversation so far. Go through the topics in the order they came up; for each, give the conclusion or decision reached, or say it is still open.
+End with the open questions and the agreed next steps, if there are any.
+If the user's message names a topic, recap only that. Keep it concise, and do not add new analysis or continue any topic.
 '''
 
 [plan]
