@@ -1,5 +1,6 @@
 import json
 import secrets
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -61,6 +62,9 @@ class Session:
     def retract(self):
         """Take back the last message, e.g. one that never got a reply; full.jsonl keeps a record of it."""
         message = self.messages.pop()
+        if not any(m['role'] == 'user' for m in self.messages):  # a failed first message leaves no session behind
+            self._discard()
+            return
         record = {'ts': datetime.now().astimezone().isoformat(), 'message': message, 'retracted': True}
         self._append_jsonl(self.full_path, record)
         self._rewrite_current()
@@ -72,6 +76,12 @@ class Session:
         self._lock()
         self._write_meta()
         self._append_record(self.messages[0])  # the system prompt
+
+    def _discard(self):
+        """Delete the session folder; the next message starts a new one."""
+        self.lock.release()  # before deleting, so the lock file is not held open
+        shutil.rmtree(self.dir)
+        self.dir = None
 
     def _set_paths(self, folder: Path):
         self.dir = folder
