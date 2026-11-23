@@ -1,3 +1,4 @@
+import re
 import tomllib
 from pathlib import Path
 from typing import Literal, Self
@@ -6,6 +7,8 @@ from pydantic import BaseModel, ConfigDict
 
 AGES = Path(__file__).parent / 'ages.toml'
 BLACKSMITH = Path(__file__).parent / 'blacksmith.toml'
+TOWN_CENTER = Path(__file__).parent / 'town_center.md'  # shared by every age
+SLASH_NAME = re.compile(r'(?<!\S)/([\w-]+)(?![\w/-])')  # a /name standing alone, not part of a path like /usr/bin
 
 
 class Age(BaseModel):

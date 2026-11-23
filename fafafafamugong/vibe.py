@@ -9,6 +9,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.lexers import Lexer
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
@@ -16,12 +17,13 @@ from rich.segment import Segment
 from rich.spinner import Spinner
 from rich.text import Text
 
-from fafafafamugong.schema import Tech
+from fafafafamugong.schema import SLASH_NAME, Tech
 from fafafafamugong.session import Session, get_session_id
 
 console = Console()
 PROMPT = '\n> '  # the plain prompt, used without a terminal
 CODE_THEME = 'monokai'
+SLASH_STYLE = 'bold dim'  # a /name that takes effect, in the input box and when the message is shown again
 MARKERS = {  # completion menu marker per command kind: (symbol, style); the menu's own colours keep them readable
     'builtin': ('●', ''),  # runs inside fa
     'shortcut': ('○', ''),  # gets inserted into the message
@@ -63,6 +65,7 @@ def make_reader(home: Path, commands: dict, session: Session, model: str) -> Cal
         history=FileHistory(history),
         completer=SlashCompleter(menu),
         complete_while_typing=True,  # open the menu as soon as / is typed
+        lexer=SlashLexer(commands),  # mark the /names that take effect while typing
         key_bindings=_key_bindings(),
         prompt_continuation=lambda width, line_number, wrap_count: ' ' * width,  # indent extra lines under the >
         erase_when_done=True,  # the status line and the raw input go away; show_user() reprints the message
@@ -72,7 +75,7 @@ def make_reader(home: Path, commands: dict, session: Session, model: str) -> Cal
     def read() -> str:
         text = prompt.prompt([('dim', f'\n{_status(session, model)}\n'), ('bold', '> ')])
         if text.strip():
-            show_user(text)
+            show_user(text, commands=commands)
         return text
 
     return read
@@ -85,6 +88,30 @@ def _status(session: Session, model: str) -> str:
         tokens = session.usage['prompt_tokens'] + session.usage['completion_tokens']
         parts.append(f'context {tokens / 1000:.1f}k tokens' if tokens >= 1000 else f'context {tokens} tokens')
     return '  '.join(part for part in parts if part)
+
+
+def _mark_slashes(text: str, commands: dict, first_line: bool = True) -> list[tuple[str, str]]:
+    """Split text into (style, text) fragments, marking the /names that take effect: shortcuts anywhere, built-ins at the start."""
+    fragments, last = [], 0
+    for match in SLASH_NAME.finditer(text):
+        command = commands.get(match[1])
+        at_start = first_line and not text[:match.start()].strip()
+        if isinstance(command, Tech) or (command is not None and at_start):
+            fragments += [('', text[last:match.start()]), (SLASH_STYLE, match[0])]
+            last = match.end()
+    fragments.append(('', text[last:]))
+    return fragments
+
+
+class SlashLexer(Lexer):
+    """Mark the /names that will take effect while the message is still being typed."""
+
+    def __init__(self, commands: dict):
+        self.commands = commands
+
+    def lex_document(self, document):
+        lines = document.lines
+        return lambda number: _mark_slashes(lines[number], self.commands, first_line=number == 0)
 
 
 class SlashCompleter(Completer):
@@ -150,18 +177,20 @@ def notice(level: str, tag: str, text: str = ''):
     console.print(Text.assemble((f'{symbol} {tag}', f'bold {colour}'), (f'  {text}' if text else '', 'dim')))
 
 
-def show_user(text: str, clock: bool = True):
+def show_user(text: str, clock: bool = True, commands: dict | None = None):
+    """Your message as typed; the /names that took effect stand out."""
     _header('you', 'green', time.strftime('%H:%M') if clock else '')
-    console.print(Indent(Text(text)))
+    body = Text.assemble(*[(part, style) for style, part in _mark_slashes(text, commands or {})])
+    console.print(Indent(body))
 
 
-def show_resumed(session: Session):
+def show_resumed(session: Session, commands: dict | None = None):
     """Say which session is back and show where it left off."""
     console.print()
     notice('info', 'resumed', '  '.join(part for part in [get_session_id(session.dir), session.meta.get('title')] if part))
     for message in session.messages[-2:]:
         if message['role'] == 'user':
-            show_user(message['content'], clock=False)
+            show_user(message['content'], clock=False, commands=commands)
         elif message['role'] == 'assistant':
             _header('fa', 'blue')
             console.print(Indent(Markdown(message['content'], code_theme=CODE_THEME)))

@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from typing import Callable
 
 from fafafafamugong import vibe
-from fafafafamugong.schema import BLACKSMITH, Tech
+from fafafafamugong.schema import BLACKSMITH, SLASH_NAME, Tech
 from fafafafamugong.session import Session
+from fafafafamugong.tags import PromptTag, mark_text
 
 
 @dataclass
@@ -15,7 +16,6 @@ class BuiltinCommand:
 
 
 BUILTINS: dict[str, BuiltinCommand] = {}  # aliases are keys too, pointing to the same command
-NAME = re.compile(r'(?<!\S)/([\w-]+)(?![\w/-])')  # a /name standing alone, not part of a path like /usr/bin
 
 
 def builtin(name: str, description: str, aliases: tuple[str, ...] = ()):
@@ -65,7 +65,7 @@ def _help(session: Session, args: str):
 
 def parse(text: str) -> tuple[str, str] | None:
     """Split '/name args' into (name, args); None if text does not start with a /name."""
-    match = NAME.match(text)
+    match = SLASH_NAME.match(text)
     if match is None:
         return None
     return match[1], text[match.end():].strip()
@@ -78,7 +78,7 @@ def merge(techs: dict[str, Tech]) -> dict[str, BuiltinCommand | Tech]:
 
 
 def dispatch(text: str, commands: dict[str, BuiltinCommand | Tech], session: Session) -> str | None:
-    """Run a built-in, or expand shortcuts. Return text to send to the model, or None."""
+    """Run a built-in command. Return the text to keep in the session, or None when fa handled it."""
     command = parse(text)
     if command is not None:  # only the start of a message can be a command
         name, args = command
@@ -89,12 +89,12 @@ def dispatch(text: str, commands: dict[str, BuiltinCommand | Tech], session: Ses
         if isinstance(target, BuiltinCommand):
             target.fn(session, args)
             return None
-    return expand(text, commands)
+    return text
 
 
-def expand(text: str, commands: dict[str, BuiltinCommand | Tech]) -> str:
-    """Replace every /name of a shortcut with its prompt, wherever it appears; other words stay as they are."""
+def expand_shortcuts(messages: list[dict], commands: dict[str, BuiltinCommand | Tech]) -> list[dict]:
+    """A copy of messages for the model: every /shortcut in user messages becomes its prompt, tagged."""
     def replace(match: re.Match) -> str:
         command = commands.get(match[1])
-        return command.prompt.strip() if isinstance(command, Tech) else match[0]
-    return NAME.sub(replace, text)
+        return mark_text(command.prompt.strip(), PromptTag.SHORTCUT) if isinstance(command, Tech) else match[0]
+    return [{**m, 'content': SLASH_NAME.sub(replace, m['content'])} if m['role'] == 'user' else m for m in messages]

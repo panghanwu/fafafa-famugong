@@ -16,7 +16,7 @@ fa = 'fafafafamugong.cli:main'
 packages = ['fafafafamugong']
 
 [tool.setuptools.package-data]
-fafafafamugong = ['*.toml']  # ship ages.toml with the package
+fafafafamugong = ['*.toml', '*.md']  # ship ages.toml and town_center.md with the package
 
 [tool.isort]
 known_first_party = ['fafafafamugong']  # the editor may open the parent folder, where isort cannot tell

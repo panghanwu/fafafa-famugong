@@ -3,14 +3,15 @@ from pathlib import Path
 from openai import OpenAI
 
 from fafafafamugong import slash, vibe
-from fafafafamugong.schema import BLACKSMITH, Age, Tech
+from fafafafamugong.schema import BLACKSMITH, TOWN_CENTER, Age, Tech
 from fafafafamugong.session import Session
 from fafafafamugong.settings import Settings
+from fafafafamugong.tags import describe_tags
 
 
 def cook_system_prompt(age: Age, techs: dict[str, Tech]) -> str:
-    """Identity plus every skill; dark has no tools, so skills are always loaded."""
-    parts = [age.identity.strip()]
+    """The age's identity, the town center and its tag list, then every skill; dark has no tools, so skills are always loaded."""
+    parts = [age.identity.strip(), TOWN_CENTER.read_text().strip(), describe_tags()]
     for name, tech in techs.items():
         if tech.type == 'skill':
             parts.append(f'# Skill: {name}\n{tech.description}\n\n{tech.prompt.strip()}')
@@ -36,7 +37,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
         session = Session(home, system_prompt)
     else:
         session = Session.load(folder, system_prompt)
-        vibe.show_resumed(session)
+        vibe.show_resumed(session, commands)
     session.add_run(run)
     read_input = vibe.make_reader(home, commands, session, settings.model)
 
@@ -61,7 +62,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
                 flare,
                 client.chat.completions.create(
                     model=settings.model,
-                    messages=session.messages,
+                    messages=slash.expand_shortcuts(session.messages, commands),  # shortcuts are filled only when sending
                     stream=True,
                     stream_options={'include_usage': True},
                 ) as stream,
