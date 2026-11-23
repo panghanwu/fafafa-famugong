@@ -57,6 +57,29 @@ class Session:
         if self.dir is not None:  # otherwise _start() writes it later
             self._write_meta()
 
+    def estimate_tokens(self) -> int | None:
+        """Estimate current tokens from the last usage, scaled by text length; None before any reply."""
+        if self.usage is None:
+            return None
+        return round(self._tokens_per_char() * count_chars(self.messages))
+
+    def compress(self, cut: int, summary: str):
+        """Replace messages[1:cut] with the summary; full.jsonl keeps the originals."""
+        rate = self._tokens_per_char() if self.usage is not None else None
+        message = {'role': 'user', 'content': summary}
+        replaced = cut - 1
+        self.messages[1:cut] = [message]
+        if rate is not None:
+            tokens = round(rate * count_chars(self.messages[:_last_reply(self.messages) + 1]))
+            self.usage = {'prompt_tokens': tokens, 'completion_tokens': 0, 'estimated': True}
+        self.meta['compressions'] = self.meta.get('compressions', 0) + 1
+        self._write_meta()
+        record = {'ts': datetime.now().astimezone().isoformat(), 'message': message, 'compressed': replaced}
+        if self.usage is not None:
+            record['usage'] = self.usage
+        self._append_jsonl(self.full_path, record)
+        self._rewrite_current()
+
     def retract(self):
         """Take back the last message, e.g. one that never got a reply; full.jsonl keeps a record of it."""
         message = self.messages.pop()
@@ -80,6 +103,11 @@ class Session:
         self.lock.release()  # before deleting, so the lock file is not held open
         shutil.rmtree(self.dir)
         self.dir = None
+
+    def _tokens_per_char(self) -> float:
+        """Tokens per character, from the last reply's usage."""
+        replied = self.messages[:_last_reply(self.messages) + 1]
+        return get_context_tokens(self.usage) / count_chars(replied)
 
     def _set_paths(self, folder: Path):
         self.dir = folder
@@ -151,8 +179,17 @@ def get_last_usage(folder: Path) -> dict | None:
     return next((r['usage'] for r in reversed(records) if 'usage' in r), None)
 
 
+def count_chars(messages: list[dict]) -> int:
+    return sum(len(m['content']) for m in messages)
+
+
+def _last_reply(messages: list[dict]) -> int:
+    """Index of the last assistant message, or the last message if none."""
+    return next((i for i in range(len(messages) - 1, -1, -1) if messages[i]['role'] == 'assistant'), len(messages) - 1)
+
+
 def get_context_tokens(usage: dict) -> int:
-    """How many tokens the conversation held after that reply: what was sent plus what came back."""
+    """Tokens held after a reply: prompt plus completion."""
     return usage['prompt_tokens'] + usage['completion_tokens']
 
 
@@ -168,10 +205,11 @@ def is_in_use(folder: Path) -> bool:
 
 
 def get_preview(folder: Path) -> str:
-    """The title, or the first user message; the caller shortens it."""
+    """Title, or the first message the user typed."""
     meta = json.loads((folder / 'meta.json').read_text())
     if 'title' in meta:
         return meta['title']
-    with (folder / 'current.jsonl').open() as f:
-        messages = (json.loads(line) for line in f)
-        return next((m['content'] for m in messages if m['role'] == 'user'), '(empty)')
+    with (folder / 'full.jsonl').open() as f:  # current.jsonl may open with a summary instead
+        records = (json.loads(line) for line in f)
+        typed = (r['message']['content'] for r in records if r['message']['role'] == 'user' and 'compressed' not in r)
+        return next(typed, '(empty)')

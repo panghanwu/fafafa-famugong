@@ -4,10 +4,10 @@ from pathlib import Path
 import openai
 from openai import OpenAI
 
-from fafafafamugong import slash, vibe
+from fafafafamugong import catzor, slash, vibe
 from fafafafamugong.schema import BLACKSMITH, TOWN_CENTER, Age, Tech
 from fafafafamugong.session import Session
-from fafafafamugong.settings import Settings
+from fafafafamugong.settings import COMPRESS_AT, Settings
 from fafafafamugong.tags import describe_tags
 
 
@@ -58,6 +58,14 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
             continue
 
         session.append({'role': 'user', 'content': user})
+        try:
+            compress_if_full(session, client, settings)
+        except KeyboardInterrupt:  # stopped before anything was sent: offer the message again
+            session.retract()
+            draft = user
+            vibe.notice('warn', 'interrupted', 'your message is back in the input box')
+            continue
+
         flare = vibe.Flare(settings.model)
         usage = None
         interrupted = False
@@ -97,6 +105,28 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
             draft = user
             if interrupted:
                 vibe.notice('warn', 'interrupted', 'your message is back in the input box')
+
+
+def compress_if_full(session: Session, client: OpenAI, settings: Settings):
+    """Compress the earlier part once the context reaches COMPRESS_AT; on failure, send as is."""
+    before = session.estimate_tokens()
+    if before is None or before < COMPRESS_AT * settings.context_limit:
+        return
+    cut = catzor.find_cut(session.messages)
+    if cut is None:
+        vibe.notice('warn', 'context nearly full', f'nothing to compress: the last {catzor.MIN_RAW_TURNS} turns stay word for word')
+        return
+    try:
+        with vibe.Busy('compressing'):
+            summary = catzor.summarize(client, settings.model, session.messages, cut)
+    except openai.APIError as e:
+        vibe.notice('warn', 'compression failed', explain(e, settings.llm_base_url)[2])
+        return
+    except catzor.CatzorError as e:
+        vibe.notice('warn', 'compression failed', str(e))
+        return
+    session.compress(cut, summary)
+    vibe.show_compressed(before, session.estimate_tokens())
 
 
 def explain(error: openai.APIError, base_url: str) -> tuple[str, str, str]:

@@ -25,7 +25,7 @@ class Age(BaseModel):
 class Tech(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    type: Literal['shortcut', 'skill']
+    type: Literal['shortcut', 'skill', 'catzor']
     description: str
     prompt: str
 

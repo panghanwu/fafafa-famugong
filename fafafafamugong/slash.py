@@ -5,7 +5,7 @@ from typing import Callable
 from fafafafamugong import vibe
 from fafafafamugong.schema import BLACKSMITH, SLASH_NAME, Tech
 from fafafafamugong.session import Session
-from fafafafamugong.tags import PromptTag, mark_text
+from fafafafamugong.tags import PromptTag, is_marked, mark_text
 
 
 @dataclass
@@ -80,8 +80,12 @@ def dispatch(text: str, commands: dict[str, BuiltinCommand | Tech], session: Ses
 
 
 def expand_shortcuts(messages: list[dict], commands: dict[str, BuiltinCommand | Tech]) -> list[dict]:
-    """A copy of messages for the model: every /shortcut in user messages becomes its prompt, tagged."""
+    """Expand /shortcuts in user messages for the model, skipping summaries."""
     def replace(match: re.Match) -> str:
         command = commands.get(match[1])
         return mark_text(command.prompt.strip(), PromptTag.SHORTCUT) if isinstance(command, Tech) else match[0]
-    return [{**m, 'content': SLASH_NAME.sub(replace, m['content'])} if m['role'] == 'user' else m for m in messages]
+
+    def typed(m: dict) -> bool:  # a user message, not a summary
+        return m['role'] == 'user' and not is_marked(m['content'], PromptTag.COMPRESSED)
+
+    return [{**m, 'content': SLASH_NAME.sub(replace, m['content'])} if typed(m) else m for m in messages]

@@ -53,3 +53,17 @@ Plan before you write code.
 
 Skip the plan for small, clear fixes.
 '''
+
+[compress]
+type = 'catzor'
+description = 'Summarize the earlier part of a long conversation so it fits in the context.'
+prompt = '''
+A long conversation between a user and an AI assistant no longer fits in the assistant's context.
+Its earlier part will be replaced by your summary; the recent part stays as it is.
+
+Write the summary for the assistant, who will carry on from it with no other memory of the earlier part. Call the participants "the user" and "you".
+Keep whatever the conversation still needs to go on well, keep exact what must be exact, and let the rest go. End where the recent part picks up.
+If the earlier part starts with a previous summary, merge it into yours.
+
+Write in the conversation's language. Reply with the summary only.
+'''

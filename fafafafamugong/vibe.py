@@ -49,6 +49,7 @@ LEVELS = {  # notice level: (symbol, colour)
     'warn': ('!', 'yellow'),
     'error': ('✗', 'red'),
 }
+COMPRESSING_STYLE = '#d19a66'  # the spinner while catzor compresses; the amber of a filling context
 STATES = {  # reply state: (label, style)
     'sent': ('sent', 'dim'),  # request out, nothing back yet
     'thinking': ('thinking', 'magenta'),  # reasoning arriving before the reply, e.g. from a local model
@@ -97,16 +98,19 @@ def make_reader(home: Path, commands: dict, session: Session, settings: Settings
 
 
 def _status(session: Session, settings: Settings) -> list[tuple[str, str]]:
-    """The line above the input as (style, text) fragments: session, title, model and how full the context is."""
+    """Status line above the input: session, title, model and context usage."""
     parts = [get_session_id(session.dir) if session.dir else 'new session', session.meta.get('title'), settings.model]
     fragments = [('dim', '  '.join(part for part in parts if part))]
     if session.usage:
         tokens = get_context_tokens(session.usage)
         share = tokens / settings.context_limit
-        # floored, so the number never reads 80% while the style still says below it
-        context = f'{_format_tokens(tokens)} tokens ({int(share * 100)}%)'
+        # floor to match the style thresholds
+        estimate = '~' if session.usage.get('estimated') else ''  # estimated after compression
+        context = f'{estimate}{_format_tokens(tokens)} tokens ({int(share * 100)}%)'
         style = next(style for start, style in CONTEXT_STYLES if share >= start)
         fragments += [('dim', '  '), (style, context)]
+    if count := session.meta.get('compressions'):
+        fragments.append(('dim', f'  compressed ×{count}'))
     return fragments
 
 
@@ -335,6 +339,37 @@ class Flare:
         elapsed = time.monotonic() - self._start
         self._spinner.update(text=Text.assemble((label, style), (f'  {elapsed:.1f}s  ctrl+c to stop', 'dim')), style=style)
         yield Indent(self._spinner)
+
+
+class Busy:
+    """Spinner line for work other than a reply, e.g. Busy('compressing')."""
+
+    def __init__(self, label: str, style: str = COMPRESSING_STYLE):
+        self.label = label
+        self.style = style
+        self._spinner = Spinner('dots')
+
+    def __enter__(self):
+        self._start = time.monotonic()
+        self._live = Live(self, console=console, refresh_per_second=12, transient=True)
+        self._live.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._live.stop()
+        return False  # let Ctrl+C and errors reach the caller
+
+    def __rich_console__(self, console, options):
+        elapsed = time.monotonic() - self._start
+        text = Text.assemble((self.label, self.style), (f'  {elapsed:.1f}s  ctrl+c to stop', 'dim'))
+        self._spinner.update(text=text, style=self.style)
+        yield Indent(self._spinner)
+
+
+def show_compressed(before: int, after: int):
+    """Show how much compression saved."""
+    saved = 1 - after / before
+    notice('ok', 'compressed', f'{saved:.0%} smaller  ~{_format_tokens(before)} → ~{_format_tokens(after)} tokens')
 
 
 def _header(name: str, colour: str, *details: str):
