@@ -1,3 +1,4 @@
+"""The main agent: the chat loop that reads your messages, sends them to the model and shows the replies."""
 from pathlib import Path
 
 import openai

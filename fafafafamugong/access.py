@@ -8,8 +8,8 @@ import openai
 from openai import OpenAI
 
 from fafafafamugong import vibe
-from fafafafamugong.agent import explain
 from fafafafamugong.settings import CONFIG_NAME, Settings, make_config
+from fafafafamugong.wololo import explain
 
 KEY_NAME = 'key'
 URL = re.compile(r'https?://[^\s\'"]+')  # no spaces or quotes, so it fits in config.toml as is

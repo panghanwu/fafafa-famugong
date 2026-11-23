@@ -246,7 +246,6 @@ class Flare:
     """
     Show one streamed reply: a waiting line, then markdown block by block.
 
-    Named after the flare in Age of Empires II, the signal a player sends to show up on an ally's screen.
     Use it as a context manager around the request, then feed it with think() and write().
     Finished blocks are printed for good; only the block still arriving is redrawn, so long replies are fine.
     """

@@ -10,9 +10,9 @@ from typing import get_args
 from pydantic import ValidationError
 
 from fafafafamugong.access import login, read_key, setup
-from fafafafamugong.agent import chat
 from fafafafamugong.session import find_sessions, get_last_active, get_preview, get_session_id, is_in_use
 from fafafafamugong.settings import CONFIG_NAME, Settings, read_config
+from fafafafamugong.wololo import chat
 
 
 def main():
