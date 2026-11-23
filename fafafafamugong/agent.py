@@ -29,6 +29,8 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
     }
     system_prompt = cook_system_prompt(age, techs)
 
+    vibe.show_banner(settings.age)
+
     # create/load session
     if folder is None:
         session = Session(home, system_prompt)

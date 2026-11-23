@@ -1,6 +1,7 @@
 """Terminal UI: how fa reads input and shows output. Harness logic stays out of this module."""
 import sys
 import time
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Callable
 
@@ -65,6 +66,7 @@ def make_reader(home: Path, commands: dict, session: Session, model: str) -> Cal
         key_bindings=_key_bindings(),
         prompt_continuation=lambda width, line_number, wrap_count: ' ' * width,  # indent extra lines under the >
         erase_when_done=True,  # the status line and the raw input go away; show_user() reprints the message
+        placeholder=[('dim', 'Type a message')],  # shown while the box is empty
     )
 
     def read() -> str:
@@ -130,6 +132,18 @@ def _key_bindings() -> KeyBindings:
 
 # Output
 
+def show_banner(age: str):
+    """Two lines when fa starts: name, version and age, then the keys worth knowing."""
+    if not console.is_terminal:  # keep piped output clean
+        return
+    try:
+        number = version('fafafa-famugong')
+    except PackageNotFoundError:  # running from a source tree that was never installed
+        number = ''
+    console.print(Text.assemble(('fafafa famugong', 'bold'), f' {number}' if number else '', '  ', (f'{age.title()} Age', 'italic')))
+    console.print(Text('/help for commands  esc+enter for a new line  ctrl+d to quit', style='dim'))
+
+
 def notice(level: str, tag: str, text: str = ''):
     """A line from fa itself, e.g. notice('ok', 'renamed', 'JSONL reader'); level is info, ok, warn or error."""
     symbol, colour = LEVELS[level]
@@ -143,6 +157,7 @@ def show_user(text: str, clock: bool = True):
 
 def show_resumed(session: Session):
     """Say which session is back and show where it left off."""
+    console.print()
     notice('info', 'resumed', '  '.join(part for part in [get_session_id(session.dir), session.meta.get('title')] if part))
     for message in session.messages[-2:]:
         if message['role'] == 'user':
