@@ -1,7 +1,6 @@
 """Terminal UI: how fa reads input and shows output. Harness logic stays out of this module."""
 import sys
 import time
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Callable
 
@@ -18,6 +17,7 @@ from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
 
+from fafafafamugong import __version__
 from fafafafamugong.schema import SLASH_NAME, Tech
 from fafafafamugong.session import Session, get_context_tokens, get_session_id
 from fafafafamugong.settings import COMPRESS_AT, Settings
@@ -194,11 +194,9 @@ def show_banner(age: str):
     """Two lines when fa starts: name, version and age, then the keys worth knowing."""
     if not console.is_terminal:  # keep piped output clean
         return
-    try:
-        number = version('fafafa-famugong')
-    except PackageNotFoundError:  # running from a source tree that was never installed
-        number = ''
-    console.print(Text.assemble(('fafafa famugong', 'bold'), f' {number}' if number else '', '  ', (f'{age.title()} Age', 'italic')))
+    console.print(Text.assemble(
+        ('fafafa famugong', 'bold'), f' {__version__}' if __version__ else '', '  ', (f'{age.title()} Age', 'italic')
+    ))
     console.print(Text('/help for commands  esc+enter for a new line  ctrl+d to quit', style='dim'))
 
 

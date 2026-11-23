@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import get_args
 
-from fafafafamugong import vibe
+from fafafafamugong import log, vibe
 from fafafafamugong.access import login, read_key, setup
 from fafafafamugong.session import (find_sessions, get_context_tokens, get_last_active, get_last_usage, get_preview,
                                     get_session_id, is_in_use)
@@ -26,9 +26,11 @@ def main():
     group.add_argument('--login', action='store_true', help='enter a new access key')
     args = parser.parse_args()
 
+    os.umask(0o077)  # everything fa writes is for this user only
     home = args.home or Path(os.environ.get('FA_HOME') or Path.home() / '.famugong')
     home = home.expanduser()
     home.mkdir(mode=0o700, parents=True, exist_ok=True)
+    log.start(home)
 
     if args.list:
         folders = find_sessions(home)

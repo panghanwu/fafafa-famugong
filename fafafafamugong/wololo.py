@@ -4,7 +4,7 @@ from pathlib import Path
 import openai
 from openai import OpenAI
 
-from fafafafamugong import catzor, slash, vibe
+from fafafafamugong import catzor, log, slash, vibe
 from fafafafamugong.schema import BLACKSMITH, TOWN_CENTER, Age, Tech
 from fafafafamugong.session import Session
 from fafafafamugong.settings import COMPRESS_AT, Settings
@@ -41,6 +41,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
         session = Session.load(folder, system_prompt)
         vibe.show_resumed(session, commands)
     session.add_run(run)
+    log.watch(session, settings)
     read_input = vibe.make_reader(home, commands, session, settings)
     draft = ''  # a message that got no reply, offered again in the input box
 
@@ -95,6 +96,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
 
         stopped = interrupted or error is not None
         if error is not None:
+            log.record('reply', error)
             vibe.notice(*explain(error, settings.llm_base_url))
         if flare.text:
             session.append({'role': 'assistant', 'content': flare.text}, stopped, usage=usage)
@@ -120,9 +122,11 @@ def compress_if_full(session: Session, client: OpenAI, settings: Settings):
         with vibe.Busy('compressing'):
             summary = catzor.summarize(client, settings.model, session.messages, cut)
     except openai.APIError as e:
+        log.record('compress', e)
         vibe.notice('warn', 'compression failed', explain(e, settings.llm_base_url)[2])
         return
     except catzor.CatzorError as e:
+        log.record('compress', e)
         vibe.notice('warn', 'compression failed', str(e))
         return
     session.compress(cut, summary)

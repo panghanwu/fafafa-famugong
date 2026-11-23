@@ -7,7 +7,7 @@ from pathlib import Path
 import openai
 from openai import OpenAI
 
-from fafafafamugong import vibe
+from fafafafamugong import log, vibe
 from fafafafamugong.settings import CONFIG_NAME, Settings, make_config
 from fafafafamugong.wololo import explain
 
@@ -84,6 +84,7 @@ def _ask_key(base_url: str) -> tuple[str, list[str]] | None:
             if _is_rejected(e):
                 vibe.notice('error', 'not accepted', 'check the key and try again')
                 continue
+            log.record('login', e, url=base_url)
             vibe.notice(*explain(e, base_url))
             return None
         return key, [model.id for model in models]
