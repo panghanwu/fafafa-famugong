@@ -12,6 +12,15 @@ prompt = '''
 Your previous reply was cut off. Continue from exactly where it stopped. Do not repeat what you already wrote, and do not add a preamble.
 '''
 
+[find]
+type = 'shortcut'
+description = 'Find the parts of this conversation that match a description.'
+prompt = '''
+Search this conversation for the passages that match what the user describes in this message, and quote them.
+For each match, say who said it (you or the user) and roughly when (e.g. "your second reply"), then quote the relevant lines exactly in a blockquote.
+Put the closest matches first; if nothing matches, say so plainly. Do not answer or continue the topic itself.
+'''
+
 [plan]
 type = 'skill'
 description = 'Use when the user asks for a change that spans several steps or files.'

@@ -15,10 +15,10 @@ from fafafafamugong.settings import REPO_ENV, Settings
 
 def main():
     parser = argparse.ArgumentParser(prog='fa')
-    parser.add_argument('--home', type=Path)
+    parser.add_argument('-H', '--home', type=Path, help='where fa keeps its data (default: $FA_HOME or ~/.famugong)')  # -h is --help
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--list', action='store_true', help='list sessions, latest first')
-    group.add_argument('--resume', nargs='?', const='', metavar='ID', help='resume the latest session, or one by ID')
+    group.add_argument('-l', '--list', action='store_true', help='list sessions, latest first')
+    group.add_argument('-r', '--resume', nargs='?', const='', metavar='ID', help='resume the latest session, or one by ID')
     args = parser.parse_args()
 
     home = args.home or Path(os.environ.get('FA_HOME') or Path.home() / '.famugong')
