@@ -15,6 +15,7 @@ from rich.live import Live
 from rich.markdown import Markdown
 from rich.segment import Segment
 from rich.spinner import Spinner
+from rich.table import Table
 from rich.text import Text
 
 from fafafafamugong.schema import SLASH_NAME, Tech
@@ -24,10 +25,17 @@ console = Console()
 PROMPT = '\n> '  # the plain prompt, used without a terminal
 CODE_THEME = 'monokai'
 SLASH_STYLE = 'bold dim'  # a /name that takes effect, in the input box and when the message is shown again
-MARKERS = {  # completion menu marker per command kind: (symbol, style); the menu's own colours keep them readable
+MARKERS = {  # marker per command kind in the completion menu and /help: (symbol, style)
     'builtin': ('●', ''),  # runs inside fa
     'shortcut': ('○', ''),  # gets inserted into the message
+    'skill': ('◇', ''),  # loaded by the model; only in /help, since it cannot be typed
 }
+HELP_SECTIONS = {  # kind: (title, note)
+    'builtin': ('commands', 'at the start of a message'),
+    'shortcut': ('shortcuts', 'anywhere in a message'),
+    'skill': ('skills', 'used by the model when it fits'),
+}
+KEYS = [('esc+enter', 'new line'), ('ctrl+c', 'clear the line'), ('ctrl+d', 'quit')]
 LEVELS = {  # notice level: (symbol, colour)
     'info': ('›', 'blue'),
     'ok': ('✓', 'green'),
@@ -175,6 +183,44 @@ def notice(level: str, tag: str, text: str = ''):
     """A line from fa itself, e.g. notice('ok', 'renamed', 'JSONL reader'); level is info, ok, warn or error."""
     symbol, colour = LEVELS[level]
     console.print(Text.assemble((f'{symbol} {tag}', f'bold {colour}'), (f'  {text}' if text else '', 'dim')))
+
+
+def show_help(commands: dict, skills: dict[str, Tech]):
+    """What can be typed or used, one section per kind, then the keys; columns line up across sections."""
+    rows = {kind: [] for kind in HELP_SECTIONS}  # kind -> [(name, aliases, description, usage)]
+    for name, command in commands.items():
+        if isinstance(command, Tech):
+            rows['shortcut'].append((f'/{name}', '', command.description, ''))
+        elif name not in command.aliases:
+            aliases = '  '.join(f'/{alias}' for alias in command.aliases)
+            rows['builtin'].append((f'/{name}', aliases, command.description, command.usage))
+    for name, skill in skills.items():
+        rows['skill'].append((name, '', skill.description, ''))
+
+    every = [row for kind_rows in rows.values() for row in kind_rows]
+    name_width = max((len(row[0]) for row in every), default=0) + 2  # room for the marker
+    alias_width = max((len(row[1]) for row in every), default=0)
+    for kind, (title, note) in HELP_SECTIONS.items():
+        if not rows[kind]:
+            continue
+        console.print()
+        console.print(Text.assemble((title, 'bold'), (f'  {note}', 'dim')))
+        symbol, style = MARKERS[kind]
+        grid = Table.grid(padding=(0, 2))
+        grid.add_column(min_width=name_width, no_wrap=True)
+        if alias_width:
+            grid.add_column(min_width=alias_width, no_wrap=True)
+        grid.add_column()  # the description wraps within its own column
+        for name, aliases, description, usage in sorted(rows[kind]):
+            cells = [Text.assemble((f'{symbol} ', style), (name, 'bold'))]
+            if alias_width:
+                cells.append(Text(aliases, style='dim'))
+            cells.append(Text.assemble(description, (f'  {usage}' if usage else '', 'dim')))
+            grid.add_row(*cells)
+        console.print(Indent(grid))
+    console.print()
+    keys = Text('   ').join(Text.assemble((key, 'bold'), (f' {action}', 'dim')) for key, action in KEYS)
+    console.print(Text.assemble(('keys', 'bold'), '  ', keys))
 
 
 def show_user(text: str, clock: bool = True, commands: dict | None = None):

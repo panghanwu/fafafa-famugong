@@ -13,15 +13,16 @@ class BuiltinCommand:
     description: str
     fn: Callable[[Session, str], None]
     aliases: tuple[str, ...] = ()
+    usage: str = ''  # what goes after the name, e.g. '<title>'
 
 
 BUILTINS: dict[str, BuiltinCommand] = {}  # aliases are keys too, pointing to the same command
 
 
-def builtin(name: str, description: str, aliases: tuple[str, ...] = ()):
+def builtin(name: str, description: str, aliases: tuple[str, ...] = (), usage: str = ''):
     """Register a function as a built-in slash command."""
     def register(fn):
-        command = BuiltinCommand(description, fn, aliases)
+        command = BuiltinCommand(description, fn, aliases, usage)
         for key in (name, *aliases):
             BUILTINS[key] = command
         return fn
@@ -33,7 +34,7 @@ def _quit(session: Session, args: str):
     raise SystemExit
 
 
-@builtin('rename', 'Rename the session: /rename <title>', aliases=('r',))
+@builtin('rename', 'Rename the session', aliases=('r',), usage='<title>')
 def _rename(session: Session, args: str):
     if not args:  # later: let catzor pick a title
         vibe.notice('warn', 'usage', '/rename <title>')
@@ -45,22 +46,8 @@ def _rename(session: Session, args: str):
 @builtin('help', 'List commands, shortcuts and skills', aliases=('h',))
 def _help(session: Session, args: str):
     techs = Tech.load(BLACKSMITH)
-    commands = [
-        (', '.join(f'/{n}' for n in (name, *command.aliases)), command.description)
-        for name, command in BUILTINS.items() if name not in command.aliases
-    ]
-    shortcuts = [(f'/{n}', t.description) for n, t in techs.items() if t.type == 'shortcut' and n not in BUILTINS]
-    skills = [(n, t.description) for n, t in techs.items() if t.type == 'skill']
-    width = max(len(label) for label, _ in commands + shortcuts + skills)
-    for title, rows in [
-        ('commands', commands),
-        ('shortcuts (anywhere in a message)', shortcuts),
-        ('skills (used by the model)', skills),
-    ]:
-        if rows:
-            print(f'{title}:')
-            for label, description in rows:
-                print(f'  {label:<{width}}  {description}')
+    skills = {name: tech for name, tech in techs.items() if tech.type == 'skill'}
+    vibe.show_help(merge(techs), skills)
 
 
 def parse(text: str) -> tuple[str, str] | None:
