@@ -14,12 +14,20 @@ SLASH_NAME = re.compile(r'(?<!\S)/([\w-]+)(?![\w/-])')  # a /name standing alone
 class Age(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
+    level: int
     identity: str
 
     @classmethod
+    def load_all(cls) -> dict[str, Self]:
+        return {name: cls.model_validate(age) for name, age in tomllib.loads(AGES.read_text()).items()}
+
+    @classmethod
     def load(cls, name: str) -> Self:
-        ages = tomllib.loads(AGES.read_text())
-        return cls.model_validate(ages[name])
+        return cls.load_all()[name]
+
+
+def to_age(value: str) -> str:
+    return next((name for name, age in Age.load_all().items() if str(age.level) == value), value)
 
 
 class Tech(BaseModel):

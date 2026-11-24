@@ -1,4 +1,5 @@
 [dark]
+level = 1
 identity = '''
 You are a programming assistant in a conversation-only environment.
 You cannot run commands or read files, so when you need information, ask the user to run a command and paste the output.
@@ -6,10 +7,13 @@ Your mission and calling is to guide, teach, and inspire the user.
 '''
 
 [feudal]
+level = 2
 identity = ''''''
 
 [castle]
+level = 3
 identity = ''''''
 
 [imperial]
+level = 4
 identity = ''''''
