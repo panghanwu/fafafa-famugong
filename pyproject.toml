@@ -1,14 +1,21 @@
 [build-system]
-requires = ['setuptools>=69']
+requires = ['setuptools>=77']  # 77 is the first release with license = 'MIT' (PEP 639)
 build-backend = 'setuptools.build_meta'
 
 [project]
 name = 'fafafa-famugong'
-version = '0.0.1'
+version = '0.1.0b1'
+description = 'A lightweight LLM harness for the terminal'
+readme = 'README.md'
+license = 'MIT'
+license-files = ['LICENSE']
 requires-python = '>=3.12'
 authors = [{name = 'panghanwu', email = 'keyboywu@gmail.com'}]
 # prompt_toolkit 3.0.52 is the first release with the dim style
 dependencies = ['filelock', 'openai', 'prompt_toolkit>=3.0.52', 'pydantic', 'rich']
+
+[project.urls]
+Homepage = 'https://github.com/panghanwu/fafafa-famugong'
 
 [project.scripts]
 fa = 'fafafafamugong.cli:main'
