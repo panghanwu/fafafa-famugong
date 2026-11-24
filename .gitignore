@@ -1,0 +1,11 @@
+# python
+__pycache__/
+*.egg-info/
+build/
+dist/
+
+# secrets
+.env
+
+# macos
+.DS_Store
