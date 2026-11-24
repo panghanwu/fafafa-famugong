@@ -36,7 +36,7 @@ def main():
         folders = find_sessions(home)
         if not folders:
             sys.exit('no sessions yet')
-        os.environ.setdefault('LESS', 'FRX')  # like git: no pager if it fits on one screen
+        os.environ.setdefault('LESS', r'FRX -Ps?e(END) :\: .(q to quit)$')  # like git: no pager if it fits; the prompt says how to leave
         pydoc.pager(format_sessions(folders, load_settings(home).context_limit) + '\n')
         return
 
