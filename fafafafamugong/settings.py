@@ -31,7 +31,7 @@ class Settings(BaseModel):
 def load_settings(home: Path, **values) -> Settings:
     """Settings from config.toml plus the given values; exits on a bad config.toml."""
     try:
-        return Settings(**read_config(home), **values)
+        return Settings(**(read_config(home) | values))  # the given values win over config.toml
     except ValidationError as e:
         problems = '\n'.join(f'  {error['loc'][0]}: {error['msg']}' for error in e.errors())
         sys.exit(f'{home / CONFIG_NAME}:\n{problems}')

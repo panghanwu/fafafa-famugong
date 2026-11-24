@@ -249,6 +249,16 @@ def show_help(commands: dict, skills: dict[str, Tech]):
     console.print(Text.assemble(('keys', 'bold'), '  ', keys))
 
 
+def show_models(models: list[str], current: str | None = None, numbered: bool = False):
+    width = len(str(len(models)))
+    for number, name in enumerate(models, 1):
+        line = Text(f'{number:>{width}}  ' if numbered else '', style='dim')
+        line.append(name, style='bold' if name == current else '')
+        if name == current:
+            line.append('  (current)', style='dim')
+        console.print(line)
+
+
 def render_sessions(rows: list[tuple[str, str, str, str, bool]]) -> str:
     """The session list for a pager; plain text when piped."""
     header = '  '.join(['id'.ljust(6), 'last active'.ljust(16), 'context'.rjust(7), 'title'])

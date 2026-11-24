@@ -8,7 +8,7 @@ import openai
 from openai import OpenAI
 
 from fafafafamugong import log, vibe
-from fafafafamugong.settings import CONFIG_NAME, Settings, make_config
+from fafafafamugong.settings import CONFIG_NAME, Settings, make_config, read_config
 from fafafafamugong.wololo import explain
 
 KEY_NAME = 'key'
@@ -46,14 +46,13 @@ def setup(home: Path):
         if answer is not None:
             break
     key, models = answer
-    save_key(home, key)
+    model = _ask_model(models, default_model)
+    save_key(home, key)  # only now: a cancelled setup leaves nothing behind
     vibe.notice('ok', 'logged in', f'key saved to {home / KEY_NAME}')
     path = home / CONFIG_NAME
-    path.write_text(make_config({'llm_base_url': base_url}))
+    path.write_text(make_config({'llm_base_url': base_url, 'model': model}))
     vibe.notice('ok', 'created', str(path))
-    if models and default_model not in models:
-        vibe.notice('warn', 'model', f'{default_model} is not on this proxy; pick one in config.toml')
-    vibe.notice('info', 'next', 'check the model in config.toml, then run fa again')
+    vibe.notice('info', 'next', 'run fa to start')
 
 
 def login(base_url: str, home: Path) -> str:
@@ -79,7 +78,7 @@ def _ask_key(base_url: str) -> tuple[str, list[str]] | None:
         if not key:
             continue
         try:
-            models = OpenAI(base_url=base_url, api_key=key, timeout=10).models.list()  # free: no model is called
+            models = fetch_models(base_url, key)
         except openai.APIError as e:
             if _is_rejected(e):
                 vibe.notice('error', 'not accepted', 'check the key and try again')
@@ -87,7 +86,57 @@ def _ask_key(base_url: str) -> tuple[str, list[str]] | None:
             log.record('login', e, url=base_url)
             vibe.notice(*explain(e, base_url))
             return None
-        return key, [model.id for model in models]
+        return key, models
+
+
+def _ask_model(models: list[str], default: str) -> str:
+    """Pick a model by its number or name."""
+    if not models:
+        vibe.notice('warn', 'no models', f'the proxy lists none for this key; using {default}, change it in config.toml')
+        return default
+    default = default if default in models else models[0]
+    vibe.notice('info', 'model', 'pick the model to work with')
+    vibe.show_models(models, numbered=True)
+    while True:
+        try:
+            answer = input(f'model [{default}]: ').strip() or default
+        except (EOFError, KeyboardInterrupt):
+            sys.exit('\nsetup cancelled')
+        if answer.isdigit() and 1 <= int(answer) <= len(models):
+            return models[int(answer) - 1]
+        if answer in models:
+            return answer
+        vibe.notice('warn', 'not on the list', 'type a number or a name from the list')
+
+
+def fetch_models(base_url: str, key: str) -> list[str]:
+    response = OpenAI(base_url=base_url, api_key=key, timeout=10).models.list()  # free: no model is called
+    return sorted(model.id for model in response)
+
+
+def list_models(settings: Settings):
+    vibe.show_models(_models_or_exit(settings), current=settings.model)
+
+
+def switch_model(home: Path, settings: Settings, name: str):
+    """Save the model to config.toml once the proxy lists it."""
+    models = _models_or_exit(settings)
+    if name not in models:
+        vibe.notice('error', 'unknown model', f'{name} is not on the proxy; pick one of these')
+        vibe.show_models(models, current=settings.model)
+        sys.exit(1)
+    (home / CONFIG_NAME).write_text(make_config(read_config(home) | {'model': name}))
+    settings.model = name
+    vibe.notice('ok', 'model', f'{name} saved to config.toml')
+
+
+def _models_or_exit(settings: Settings) -> list[str]:
+    try:
+        return fetch_models(settings.llm_base_url, settings.llm_api_key)
+    except openai.APIError as e:
+        log.record('models', e, url=settings.llm_base_url)
+        vibe.notice(*explain(e, settings.llm_base_url))
+        sys.exit(1)
 
 
 def _is_rejected(error: openai.APIError) -> bool:
