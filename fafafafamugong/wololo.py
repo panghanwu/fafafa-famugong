@@ -1,4 +1,4 @@
-"""The main agent: the chat loop that reads your messages, sends them to the model and shows the replies."""
+"""The main agent: the chat loop."""
 import sys
 from pathlib import Path
 
@@ -7,13 +7,13 @@ from openai import OpenAI
 
 from fafafafamugong import catzor, log, slash, vibe
 from fafafafamugong.schema import BLACKSMITH, TOWN_CENTER, Age, Tech
-from fafafafamugong.session import Session, SessionError, get_session_id
+from fafafafamugong.session import Session, SessionError, get_session_id, read_usage
 from fafafafamugong.settings import COMPRESS_AT, Settings
 from fafafafamugong.tags import describe_tags
 
 
 def cook_system_prompt(age: Age, techs: dict[str, Tech]) -> str:
-    """The age's identity, the town center and its tag list, then every skill; dark has no tools, so skills are always loaded."""
+    """Build the system prompt: identity, town center, tags and every skill."""
     parts = [age.identity.strip(), TOWN_CENTER.read_text().strip(), describe_tags()]
     for name, tech in techs.items():
         if tech.type == 'skill':
@@ -88,7 +88,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
             ):
                 for chunk in stream:
                     if chunk.usage:
-                        usage = {'prompt_tokens': chunk.usage.prompt_tokens, 'completion_tokens': chunk.usage.completion_tokens}
+                        usage = read_usage(chunk.usage)
                     if not chunk.choices:  # some chunks carry only metadata
                         continue
                     delta = chunk.choices[0].delta

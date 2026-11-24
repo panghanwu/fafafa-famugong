@@ -1,4 +1,4 @@
-"""Terminal UI: how fa reads input and shows output. Harness logic stays out of this module."""
+"""Terminal UI: reading input and showing output; no harness logic here."""
 import sys
 import time
 from pathlib import Path
@@ -61,14 +61,8 @@ STATES = {  # reply state: (label, style)
 # Input
 
 def make_reader(home: Path, commands: dict, session: Session, settings: Settings) -> Callable[[str], str]:
-    """
-    Return a function that reads one message from the user; read(draft) starts the input box with draft in it.
-
-    commands maps names to built-ins and shortcuts, as slash.merge() builds it; settings gives the status line its model
-    and context limit. The function raises EOFError (Ctrl+D) or KeyboardInterrupt (Ctrl+C on an empty line) when the
-    user wants to leave. Without a terminal, e.g. piped input, it falls back to plain input() and ignores the draft.
-    """
-    if not sys.stdin.isatty():
+    """Return read(draft), which reads one message; it raises EOFError or KeyboardInterrupt to leave."""
+    if not sys.stdin.isatty():  # piped input: plain input(), no draft
         return lambda draft='': input(PROMPT)
     menu = {}  # name -> (kind, description)
     for name, command in sorted(commands.items(), key=lambda item: isinstance(item[1], Tech)):  # built-ins first
@@ -123,7 +117,7 @@ def _format_tokens(count: int) -> str:
 
 
 def _mark_slashes(text: str, commands: dict, first_line: bool = True) -> list[tuple[str, str]]:
-    """Split text into (style, text) fragments, marking the /names that take effect: shortcuts anywhere, built-ins at the start."""
+    """Style the /names that take effect: shortcuts anywhere, built-ins at the start."""
     fragments, last = [], 0
     for match in SLASH_NAME.finditer(text):
         command = commands.get(match[1])
@@ -136,7 +130,7 @@ def _mark_slashes(text: str, commands: dict, first_line: bool = True) -> list[tu
 
 
 class SlashLexer(Lexer):
-    """Mark the /names that will take effect while the message is still being typed."""
+    """Highlight /names while typing."""
 
     def __init__(self, commands: dict):
         self.commands = commands
@@ -147,7 +141,7 @@ class SlashLexer(Lexer):
 
 
 class SlashCompleter(Completer):
-    """Suggest names while the word being typed is '/' plus part of a name: shortcuts anywhere, built-ins at the start."""
+    """Complete /names: shortcuts anywhere, built-ins at the start."""
 
     def __init__(self, menu: dict[str, tuple[str, str]]):
         self.menu = menu  # name -> (kind, description)
@@ -192,7 +186,7 @@ def _key_bindings() -> KeyBindings:
 # Output
 
 def show_banner(age: str):
-    """Two lines when fa starts: name, version and age, then the keys worth knowing."""
+    """The two lines shown when fa starts."""
     if not console.is_terminal:  # keep piped output clean
         return
     console.print(Text.assemble(
@@ -202,7 +196,7 @@ def show_banner(age: str):
 
 
 def notice(level: str, tag: str, text: str = ''):
-    """A line from fa itself, e.g. notice('ok', 'renamed', 'JSONL reader'); level is info, ok, warn or error."""
+    """A one-line message from fa; level is info, ok, warn or error."""
     symbol, colour = LEVELS[level]
     console.print(Text.assemble((f'{symbol} {tag}', f'bold {colour}'), (f'  {text}' if text else '', 'dim')))
 
@@ -218,7 +212,7 @@ def confirm(question: str) -> bool:
 
 
 def show_help(commands: dict, skills: dict[str, Tech]):
-    """What can be typed or used, one section per kind, then the keys; columns line up across sections."""
+    """List commands, shortcuts, skills and keys."""
     rows = {kind: [] for kind in HELP_SECTIONS}  # kind -> [(name, aliases, description, usage)]
     for name, command in commands.items():
         if isinstance(command, Tech):
@@ -256,12 +250,7 @@ def show_help(commands: dict, skills: dict[str, Tech]):
 
 
 def render_sessions(rows: list[tuple[str, str, str, str, bool]]) -> str:
-    """
-    The session list as text for a pager: a dim header, then one line per session.
-
-    Each row is (id, last active, context share, title or first message, in use). Colours only on a terminal,
-    so a piped list stays plain.
-    """
+    """The session list for a pager; plain text when piped."""
     header = '  '.join(['id'.ljust(6), 'last active'.ljust(16), 'context'.rjust(7), 'title'])
     lines = [Text(header, style='dim')]
     for session_id, when, share, preview, busy in rows:
@@ -275,14 +264,14 @@ def render_sessions(rows: list[tuple[str, str, str, str, bool]]) -> str:
 
 
 def show_user(text: str, clock: bool = True, commands: dict | None = None):
-    """Your message as typed; the /names that took effect stand out."""
+    """Echo the user's message with its /names highlighted."""
     _header('you', 'green', time.strftime('%H:%M') if clock else '')
     body = Text.assemble(*[(part, style) for style, part in _mark_slashes(text, commands or {})])
     console.print(Indent(body))
 
 
 def show_resumed(session: Session, commands: dict | None = None):
-    """Say which session is back and show where it left off."""
+    """Announce the resumed session and show its last turn."""
     console.print()
     notice('info', 'resumed', '  '.join(part for part in [get_session_id(session.dir), session.meta.get('title')] if part))
     show_last_turn(session, commands)
@@ -298,12 +287,7 @@ def show_last_turn(session: Session, commands: dict | None = None):
 
 
 class Flare:
-    """
-    Show one streamed reply: a waiting line, then markdown block by block.
-
-    Use it as a context manager around the request, then feed it with think() and write().
-    Finished blocks are printed for good; only the block still arriving is redrawn, so long replies are fine.
-    """
+    """Show one streamed reply; use it as a context manager and feed it with think() and write()."""
 
     def __init__(self, model: str):
         self.model = model
@@ -394,7 +378,7 @@ def _header(name: str, colour: str, *details: str):
 
 
 def _block_end(text: str) -> int | None:
-    """Index just past the first finished markdown block: a blank line outside a code fence."""
+    """Index after the first finished block: a blank line outside a code fence."""
     in_fence, pos = False, 0
     for line in text.splitlines(keepends=True):
         pos += len(line)
@@ -408,7 +392,7 @@ def _block_end(text: str) -> int | None:
 
 
 class Indent:
-    """Indent a renderable by two spaces and drop trailing padding, so copied text stays clean."""
+    """Indent by two spaces without trailing padding, so copied text stays clean."""
 
     def __init__(self, renderable, gap: bool = False):
         self.renderable = renderable

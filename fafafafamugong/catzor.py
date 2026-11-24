@@ -1,4 +1,4 @@
-"""Helper agent for jobs that support the main conversation, such as compression."""
+"""Helper agent for side jobs, such as compression."""
 from openai import OpenAI
 
 from fafafafamugong.schema import BLACKSMITH, Tech

@@ -64,7 +64,7 @@ def main():
 
 
 def format_sessions(folders: list[Path], context_limit: int) -> str:
-    """One row per session: ID, last active, how full its context is, its title or first message, and if it is in use."""
+    """Render the session list."""
     rows = []
     for folder in folders:
         when = datetime.fromtimestamp(get_last_active(folder)).strftime('%Y-%m-%d %H:%M')

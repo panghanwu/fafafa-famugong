@@ -29,7 +29,7 @@ class Settings(BaseModel):
 
 
 def load_settings(home: Path, **values) -> Settings:
-    """Settings from config.toml plus the values fa works out itself; a bad config.toml ends fa with a readable message."""
+    """Settings from config.toml plus the given values; exits on a bad config.toml."""
     try:
         return Settings(**read_config(home), **values)
     except ValidationError as e:
@@ -38,7 +38,7 @@ def load_settings(home: Path, **values) -> Settings:
 
 
 def read_config(home: Path) -> dict:
-    """The settings in <home>/config.toml, which setup() writes on the first run; none before that."""
+    """The settings in config.toml; empty before the first run."""
     path = home / CONFIG_NAME
     if not path.exists():
         return {}
@@ -53,7 +53,7 @@ def read_config(home: Path) -> dict:
 
 
 def make_config(values: dict[str, str | int]) -> str:
-    """config.toml with every setting it may hold: the given values, defaults for the rest."""
+    """The text of a config.toml: the given values, defaults for the rest."""
     lines = ['# fa settings. The access key is not kept here: run fa --login to enter a new one.']
     for name, field in Settings.model_fields.items():
         if name in NOT_IN_CONFIG:

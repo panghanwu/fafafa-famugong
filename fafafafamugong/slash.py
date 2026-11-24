@@ -80,13 +80,13 @@ def parse(text: str) -> tuple[str, str] | None:
 
 
 def merge(techs: dict[str, Tech]) -> dict[str, BuiltinCommand | Tech]:
-    """Build one namespace from built-ins and shortcuts; skills are not callable."""
+    """Built-ins and shortcuts in one namespace."""
     shortcuts = {name: t for name, t in techs.items() if t.type == 'shortcut'}
     return {**shortcuts, **BUILTINS}  # built-ins win over shortcuts
 
 
 def dispatch(text: str, commands: dict[str, BuiltinCommand | Tech], session: Session) -> str | None:
-    """Run a built-in command. Return the text to keep in the session, or None when fa handled it."""
+    """Run a built-in; return the text to send, or None if it was handled."""
     command = parse(text)
     if command is not None:  # only the start of a message can be a command
         name, args = command

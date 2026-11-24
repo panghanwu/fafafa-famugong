@@ -10,7 +10,7 @@ from filelock import FileLock, Timeout
 
 
 class SessionError(Exception):
-    """A session file that cannot be read, e.g. a line cut short by a crash."""
+    """A session file that cannot be parsed."""
 
 
 class Session:
@@ -18,7 +18,7 @@ class Session:
         self.home = home
         self.meta = {}  # a title or run can arrive before _start()
         self.messages = [{'role': 'system', 'content': system_prompt}]
-        self.usage = None  # token usage of the last reply
+        self.usage = None  # the last reply's usage, as the API reported it
         self.dir = None  # created on the first user message
 
     @classmethod
@@ -61,13 +61,13 @@ class Session:
             self._write_meta()
 
     def estimate_tokens(self) -> int | None:
-        """Estimate current tokens from the last usage, scaled by text length; None before any reply."""
+        """Estimate the context size now; None before any reply."""
         if self.usage is None:
             return None
         return round(self._tokens_per_char() * count_chars(self.messages))
 
     def compress(self, cut: int, summary: str):
-        """Replace messages[1:cut] with the summary; full.jsonl keeps the originals."""
+        """Replace messages[1:cut] with the summary."""
         rate = self._tokens_per_char() if self.usage is not None else None
         message = {'role': 'user', 'content': summary}
         replaced = cut - 1
@@ -83,7 +83,7 @@ class Session:
         self._rewrite_current()
 
     def retract(self):
-        """Take back the last message, e.g. one that never got a reply; full.jsonl keeps a record of it."""
+        """Take back the last message."""
         message = self.messages.pop()
         if not any(m['role'] == 'user' for m in self.messages):  # a failed first message leaves no session behind
             self._discard()
@@ -93,7 +93,7 @@ class Session:
         self._rewrite_current()
 
     def rollback(self, start: int):
-        """Take back the last turn, messages[start:]; full.jsonl keeps a record of it."""
+        """Take back the last turn, messages[start:]."""
         rate = self._tokens_per_char() if self.usage is not None else None
         removed = self.messages[start:]
         del self.messages[start:]
@@ -119,19 +119,18 @@ class Session:
         self._append_record(self.messages[0])  # the system prompt
 
     def _discard(self):
-        """Delete the session folder; the next message starts a new one."""
+        """Delete the session folder."""
         self.lock.release()  # before deleting, so the lock file is not held open
         shutil.rmtree(self.dir)
         self.dir = None
         self.usage = None
 
     def _tokens_per_char(self) -> float:
-        """Tokens per character, from the last reply's usage."""
         replied = self.messages[:_last_reply(self.messages) + 1]
         return get_context_tokens(self.usage) / count_chars(replied)
 
     def _rescale_usage(self, rate: float):
-        """After messages are taken out: estimate the usage at the same tokens per character, until the next reply."""
+        """Estimate the usage after messages are taken out."""
         tokens = round(rate * count_chars(self.messages[:_last_reply(self.messages) + 1]))
         self.usage = {'prompt_tokens': tokens, 'completion_tokens': 0, 'estimated': True}
 
@@ -152,7 +151,6 @@ class Session:
         self._write_atomic(self.meta_path, json.dumps(self.meta, ensure_ascii=False, indent=2) + '\n')
 
     def _rewrite_current(self):
-        """Make current.jsonl match messages again, after a change other than an append."""
         text = ''.join(json.dumps(m, ensure_ascii=False) + '\n' for m in self.messages)
         self._write_atomic(self.current_path, text)
 
@@ -190,7 +188,7 @@ def find_sessions(home: Path, prefix: str = '') -> list[Path]:
 
 
 def get_session_id(folder: Path) -> str:
-    """The hex suffix of the folder name, e.g. sessions/2026-11-21T15-49-039f90 -> 039f90."""
+    """The folder name's hex suffix, e.g. 2026-11-21T15-49-039f90 -> 039f90."""
     return folder.name.rsplit('-', 1)[-1]
 
 
@@ -199,7 +197,7 @@ def get_last_active(folder: Path) -> float:
 
 
 def get_last_usage(folder: Path) -> dict | None:
-    """Token usage of the last reply that reported one, from full.jsonl."""
+    """The last usage recorded in full.jsonl."""
     records = _read_jsonl(folder / 'full.jsonl')
     return next((r['usage'] for r in reversed(records) if 'usage' in r), None)
 
@@ -213,9 +211,21 @@ def _last_reply(messages: list[dict]) -> int:
     return next((i for i in range(len(messages) - 1, -1, -1) if messages[i]['role'] == 'assistant'), len(messages) - 1)
 
 
+def read_usage(api_usage) -> dict:
+    details = api_usage.completion_tokens_details
+    usage = {
+        'prompt_tokens': api_usage.prompt_tokens,
+        'completion_tokens': api_usage.completion_tokens,  # includes reasoning
+        'reasoning_tokens': (details.reasoning_tokens if details else None) or 0,
+    }
+    if (cost := getattr(api_usage, 'cost', None)) is not None:  # LiteLLM adds it; other APIs may not
+        usage['cost'] = cost
+    return usage
+
+
 def get_context_tokens(usage: dict) -> int:
-    """Tokens held after a reply: prompt plus completion."""
-    return usage['prompt_tokens'] + usage['completion_tokens']
+    """Context size after a reply; reasoning is not kept."""
+    return usage['prompt_tokens'] + usage['completion_tokens'] - usage.get('reasoning_tokens', 0)
 
 
 def is_in_use(folder: Path) -> bool:

@@ -1,4 +1,4 @@
-"""The access key and the first run: where fa keeps the key and how the user enters it."""
+"""The access key and the first-run setup."""
 import getpass
 import re
 import sys
@@ -28,7 +28,7 @@ def save_key(home: Path, key: str):
 
 
 def setup(home: Path):
-    """First run: ask where the proxy is and for the key, then write config.toml; nothing is kept until both work."""
+    """First run: ask for the proxy URL and a key, then write config.toml."""
     _require_terminal('set fa up')
     default_url = Settings.model_fields['llm_base_url'].default
     default_model = Settings.model_fields['model'].default
@@ -57,7 +57,7 @@ def setup(home: Path):
 
 
 def login(base_url: str, home: Path) -> str:
-    """Ask for the access key until the proxy accepts it, then keep it in <home>/key."""
+    """Ask for a key until the proxy accepts it, then save it."""
     _require_terminal('enter one')
     vibe.notice('info', 'login', f'paste your access key for {base_url}; it stays hidden as you type')
     answer = _ask_key(base_url)
@@ -70,7 +70,7 @@ def login(base_url: str, home: Path) -> str:
 
 
 def _ask_key(base_url: str) -> tuple[str, list[str]] | None:
-    """Ask until the proxy accepts a key; return it with the models it may use, or None if the proxy failed."""
+    """Return a key the proxy accepts and the models it may use; None if the proxy failed."""
     while True:
         try:
             key = getpass.getpass('key: ').strip()  # never echoed, never in any history
@@ -91,7 +91,7 @@ def _ask_key(base_url: str) -> tuple[str, list[str]] | None:
 
 
 def _is_rejected(error: openai.APIError) -> bool:
-    """True if the proxy turned the key away; a LiteLLM without a database knows only its master key and answers 400."""
+    """True if the proxy refused the key; a LiteLLM without a database answers 400."""
     return isinstance(error, openai.AuthenticationError) or getattr(error, 'type', None) == 'no_db_connection'
 
 

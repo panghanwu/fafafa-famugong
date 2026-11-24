@@ -1,4 +1,4 @@
-"""Record errors and crashes in <home>/error.log for debugging, without message content or keys."""
+"""Log errors and crashes to <home>/error.log, without message content or keys."""
 import logging
 import platform
 import re
@@ -28,7 +28,7 @@ class _Formatter(logging.Formatter):
 
 
 def start(home: Path):
-    """Write errors to error.log; a crash leaves its traceback there and one line on screen."""
+    """Set up error.log and catch crashes."""
     path = home / LOG_NAME
     handler = RotatingFileHandler(path, maxBytes=MAX_BYTES, backupCount=1, encoding='utf-8', delay=True)
     version = __version__ or 'source'
@@ -53,12 +53,10 @@ def watch(session: Session, settings: Settings):
 
 
 def record(event: str, error: BaseException, **details):
-    """Log an error fa caught; details become extra lines."""
     logger.error(_describe(event, error, details))
 
 
 def _describe(event: str, error: BaseException, details: dict) -> str:
-    """The error, then one line for each detail that is known."""
     found = {}
     if error.__cause__ is not None:  # e.g. what lies under openai's 'Connection error.'
         found['cause'] = _one_line(error.__cause__)
