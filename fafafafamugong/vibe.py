@@ -1,4 +1,5 @@
 """Terminal UI: reading input and showing output; no harness logic here."""
+import re
 import sys
 import time
 from pathlib import Path
@@ -51,6 +52,8 @@ LEVELS = {  # notice level: (symbol, colour)
     'error': ('✗', 'red'),
 }
 COMPRESSING_STYLE = '#d19a66'  # the spinner while catzor compresses; the amber of a filling context
+PRERELEASE_STYLE = '#d19a66'  # the same amber: not final yet
+PRERELEASES = {'a': 'alpha', 'b': 'beta', 'rc': 'rc'}  # PEP 440 pre-release letters
 STATES = {  # reply state: (label, style)
     'sent': ('sent', 'dim'),  # request out, nothing back yet
     'thinking': ('thinking', 'magenta'),  # reasoning arriving before the reply, e.g. from a local model
@@ -189,10 +192,17 @@ def show_banner(age: str):
     """The two lines shown when fa starts."""
     if not console.is_terminal:  # keep piped output clean
         return
+    stage = _prerelease(__version__)
     console.print(Text.assemble(
-        ('fafafa famugong', 'bold'), f' {__version__}' if __version__ else '', '  ', (f'{age.title()} Age', 'italic')
+        ('fafafa famugong', 'bold'), f' {__version__}' if __version__ else '', '  ', (f'{age.title()} Age', 'italic'),
+        (f'  {stage}', PRERELEASE_STYLE) if stage else '',
     ))
     console.print(Text('/help for commands  esc+enter for a new line  ctrl+d to quit', style='dim'))
+
+
+def _prerelease(version: str) -> str | None:
+    match = re.search(r'\d(a|b|rc)\d*$', version)  # e.g. 0.1.0b1 -> beta; none for 0.1.0
+    return PRERELEASES[match[1]] if match else None
 
 
 def notice(level: str, tag: str, text: str = ''):
