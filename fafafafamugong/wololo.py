@@ -59,7 +59,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
         if not user.strip():
             continue
 
-        user = slash.dispatch(user, commands, session)
+        user = slash.dispatch(user, commands, session, settings)
         if user is None:  # handled locally, nothing to send
             continue
 
@@ -123,6 +123,24 @@ def compress_if_full(session: Session, client: OpenAI, settings: Settings):
     if cut is None:
         vibe.notice('warn', 'context nearly full', 'nothing to compress; consider a new session')
         return
+    compress(session, client, settings, cut)
+
+
+@slash.builtin('compress', 'Compress the conversation now')  # here, since slash cannot import wololo
+def _compress(session: Session, settings: Settings, args: str):
+    cut = context.find_cut(session.messages)
+    if cut is None:
+        vibe.notice('info', 'nothing to compress')
+        return
+    try:
+        compress(session, OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key), settings, cut)
+    except KeyboardInterrupt:
+        vibe.notice('warn', 'interrupted', 'nothing was compressed')
+
+
+def compress(session: Session, client: OpenAI, settings: Settings, cut: int):
+    """Replace messages[1:cut] with a summary; on failure, keep them."""
+    before = session.estimate_tokens()
     try:
         with vibe.Busy('compressing'):
             summary = context.summarize(client, settings.wololo_model, session.messages, cut)
@@ -135,6 +153,9 @@ def compress_if_full(session: Session, client: OpenAI, settings: Settings):
         vibe.notice('warn', 'compression failed', str(e))
         return
     session.compress(cut, summary)
+    if before is None:  # the API reports no usage
+        vibe.notice('ok', 'compressed')
+        return
     after = session.estimate_tokens()
     vibe.show_compressed(before, after, low=1 - after / before < context.MIN_SAVING)
 

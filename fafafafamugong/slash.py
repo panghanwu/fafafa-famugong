@@ -5,13 +5,14 @@ from typing import Callable
 from fafafafamugong import vibe
 from fafafafamugong.schema import BLACKSMITH, SLASH_NAME, Tech
 from fafafafamugong.session import Session
+from fafafafamugong.settings import Settings
 from fafafafamugong.tags import PromptTag, is_marked, mark_text
 
 
 @dataclass
 class BuiltinCommand:
     description: str
-    fn: Callable[[Session, str], None]
+    fn: Callable[[Session, Settings, str], None]
     aliases: tuple[str, ...] = ()
     usage: str = ''  # what goes after the name, e.g. '<title>'
 
@@ -30,12 +31,12 @@ def builtin(name: str, description: str, aliases: tuple[str, ...] = (), usage: s
 
 
 @builtin('quit', 'Leave the chat', aliases=('q',))
-def _quit(session: Session, args: str):
+def _quit(session: Session, settings: Settings, args: str):
     raise SystemExit
 
 
 @builtin('rename', 'Rename the session', aliases=('r',), usage='<title>')
-def _rename(session: Session, args: str):
+def _rename(session: Session, settings: Settings, args: str):
     if not args:
         vibe.notice('warn', 'usage', '/rename <title>')
         return
@@ -44,7 +45,7 @@ def _rename(session: Session, args: str):
 
 
 @builtin('rollback', 'Remove the last turn')
-def _rollback(session: Session, args: str):
+def _rollback(session: Session, settings: Settings, args: str):
     users = [i for i, m in enumerate(session.messages) if m['role'] == 'user']
     if not users:
         vibe.notice('warn', 'nothing to roll back')
@@ -65,7 +66,7 @@ def _rollback(session: Session, args: str):
 
 
 @builtin('help', 'List commands, shortcuts and skills', aliases=('h',))
-def _help(session: Session, args: str):
+def _help(session: Session, settings: Settings, args: str):
     techs = Tech.load(BLACKSMITH)
     skills = {name: tech for name, tech in techs.items() if tech.type == 'skill'}
     vibe.show_help(merge(techs), skills)
@@ -85,7 +86,7 @@ def merge(techs: dict[str, Tech]) -> dict[str, BuiltinCommand | Tech]:
     return {**shortcuts, **BUILTINS}  # built-ins win over shortcuts
 
 
-def dispatch(text: str, commands: dict[str, BuiltinCommand | Tech], session: Session) -> str | None:
+def dispatch(text: str, commands: dict[str, BuiltinCommand | Tech], session: Session, settings: Settings) -> str | None:
     """Run a built-in; return the text to send, or None if it was handled."""
     command = parse(text)
     if command is not None:  # only the start of a message can be a command
@@ -95,7 +96,10 @@ def dispatch(text: str, commands: dict[str, BuiltinCommand | Tech], session: Ses
             vibe.notice('error', 'unknown command', f'/{name}')
             return None
         if isinstance(target, BuiltinCommand):
-            target.fn(session, args)
+            if args and not target.usage:
+                vibe.notice('error', 'unknown args', f'/{name} takes none')
+            else:
+                target.fn(session, settings, args)
             return None
     return text
 
