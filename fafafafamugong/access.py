@@ -1,18 +1,20 @@
-"""The access key and the first-run setup."""
+"""The access key, the first-run setup and the age a key gets in team mode."""
 import getpass
-import re
 import sys
+import tomllib
 from pathlib import Path
 
 import openai
 from openai import OpenAI
+from pydantic import ValidationError
 
 from fafafafamugong import log, vibe
-from fafafafamugong.settings import CONFIG_NAME, Settings, make_config, read_config
+from fafafafamugong.schema import KING, URL, Age, Kingdom, hint
+from fafafafamugong.settings import CONFIG_NAME, PLAYABLE_AGES, Settings, make_config, set_config
 from fafafafamugong.wololo import explain
 
 KEY_NAME = 'key'
-URL = re.compile(r'https?://[^\s\'"]+')  # no spaces or quotes, so it fits in config.toml as is
+BROKEN = 'team config (king.toml) is broken; please reach out to your admin'
 
 
 def read_key(home: Path) -> str | None:
@@ -27,12 +29,71 @@ def save_key(home: Path, key: str):
     path.write_text(key + '\n')
 
 
-def setup(home: Path):
-    """First run: ask for the proxy URL and a key, then write config.toml."""
+def setup(home: Path, kingdom: Kingdom | None = None):
+    """First run: ask for the proxy URL (not in team mode) and a key, then write config.toml."""
     _require_terminal('set fa up')
+    if kingdom is None:
+        vibe.notice('info', 'setup', 'first run: enter the proxy URL')
+        base_url, key, models = _ask_proxy()
+    else:
+        base_url = None  # the admin's URL stays out of sight and out of config.toml
+        vibe.notice('info', 'setup', 'first run')
+        vibe.notice('info', 'key', 'paste your access key; it stays hidden as you type')
+        answer = _ask_key(kingdom.llm_base_url)
+        if answer is None:
+            sys.exit(1)
+        key, models = answer
+        find_age(kingdom, key)  # exits on an unregistered key, before anything is saved
+    if kingdom and kingdom.default_wololo_model:
+        model = None  # left out of config.toml, so the admin's default keeps applying
+        vibe.notice('info', 'model', f'{kingdom.default_wololo_model}; fa -m picks another')
+    else:
+        model = _ask_model(models, Settings.model_fields['wololo_model'].default)
+    save_key(home, key)  # only now: a cancelled setup leaves nothing behind
+    vibe.notice('ok', 'logged in', f'key saved to {home / KEY_NAME}')
+    path = home / CONFIG_NAME
+    path.write_text(make_config({'llm_base_url': base_url, 'wololo_model': model}))
+    vibe.notice('ok', 'created', str(path))
+    vibe.notice('info', 'next', 'run fa to start')
+
+
+def login(base_url: str, home: Path, kingdom: Kingdom | None = None) -> str:
+    """Ask for a key until the proxy accepts it, then save it."""
+    _require_terminal('enter one')
+    where = '' if kingdom else f' for {base_url}'
+    vibe.notice('info', 'login', f'paste your access key{where}; it stays hidden as you type')
+    answer = _ask_key(base_url)
+    if answer is None:
+        sys.exit(1)
+    key, _ = answer
+    if kingdom is not None:
+        find_age(kingdom, key)  # exits on an unregistered key, before it is saved
+    save_key(home, key)
+    vibe.notice('ok', 'logged in', f'key saved to {home / KEY_NAME}')
+    return key
+
+
+def read_kingdom() -> Kingdom | None:
+    """king.toml, or None in personal mode; exits when it is broken."""
+    try:
+        return Kingdom.read()
+    except (OSError, tomllib.TOMLDecodeError, ValidationError) as e:
+        log.record('king', e, file=str(KING))
+        sys.exit(BROKEN)
+
+
+def find_age(kingdom: Kingdom, key: str) -> str:
+    """The key's age, capped at the playable ones; exits if the key is not registered."""
+    entry = kingdom.find(key)
+    if entry is None:
+        sys.exit(f'key {hint(key)} is not registered; please reach out to your admin')
+    ages = Age.load_all()
+    return max((name for name in PLAYABLE_AGES if ages[name].level <= entry.age), key=lambda name: ages[name].level)
+
+
+def _ask_proxy() -> tuple[str, str, list[str]]:
+    """Ask for a proxy URL and a key it accepts."""
     default_url = Settings.model_fields['llm_base_url'].default
-    default_model = Settings.model_fields['wololo_model'].default
-    vibe.notice('info', 'setup', 'first run: where is your LiteLLM proxy?')
     while True:
         try:
             base_url = input(f'proxy URL [{default_url}]: ').strip() or default_url
@@ -44,28 +105,7 @@ def setup(home: Path):
         vibe.notice('info', 'key', 'paste your access key; it stays hidden as you type')
         answer = _ask_key(base_url)
         if answer is not None:
-            break
-    key, models = answer
-    model = _ask_model(models, default_model)
-    save_key(home, key)  # only now: a cancelled setup leaves nothing behind
-    vibe.notice('ok', 'logged in', f'key saved to {home / KEY_NAME}')
-    path = home / CONFIG_NAME
-    path.write_text(make_config({'llm_base_url': base_url, 'wololo_model': model}))
-    vibe.notice('ok', 'created', str(path))
-    vibe.notice('info', 'next', 'run fa to start')
-
-
-def login(base_url: str, home: Path) -> str:
-    """Ask for a key until the proxy accepts it, then save it."""
-    _require_terminal('enter one')
-    vibe.notice('info', 'login', f'paste your access key for {base_url}; it stays hidden as you type')
-    answer = _ask_key(base_url)
-    if answer is None:
-        sys.exit(1)
-    key, _ = answer
-    save_key(home, key)
-    vibe.notice('ok', 'logged in', f'key saved to {home / KEY_NAME}')
-    return key
+            return base_url, *answer
 
 
 def _ask_key(base_url: str) -> tuple[str, list[str]] | None:
@@ -80,11 +120,11 @@ def _ask_key(base_url: str) -> tuple[str, list[str]] | None:
         try:
             models = fetch_models(base_url, key)
         except openai.APIError as e:
-            if _is_rejected(e):
+            if is_rejected(e):
                 vibe.notice('error', 'not accepted', 'check the key and try again')
                 continue
             log.record('login', e, url=base_url)
-            vibe.notice(*explain(e, base_url))
+            vibe.notice(*explain(e))
             return None
         return key, models
 
@@ -125,7 +165,7 @@ def switch_model(home: Path, settings: Settings, name: str):
         vibe.notice('error', 'unknown model', f'{name} is not on the proxy; pick one of these')
         vibe.show_models(models, current=settings.wololo_model)
         sys.exit(1)
-    (home / CONFIG_NAME).write_text(make_config(read_config(home) | {'wololo_model': name}))
+    set_config(home, 'wololo_model', name)
     settings.wololo_model = name
     vibe.notice('ok', 'model', f'{name} saved to config.toml')
 
@@ -135,11 +175,11 @@ def _models_or_exit(settings: Settings) -> list[str]:
         return fetch_models(settings.llm_base_url, settings.llm_api_key)
     except openai.APIError as e:
         log.record('models', e, url=settings.llm_base_url)
-        vibe.notice(*explain(e, settings.llm_base_url))
+        vibe.notice(*explain(e))
         sys.exit(1)
 
 
-def _is_rejected(error: openai.APIError) -> bool:
+def is_rejected(error: openai.APIError) -> bool:
     """True if the proxy refused the key; a LiteLLM without a database answers 400."""
     return isinstance(error, openai.AuthenticationError) or getattr(error, 'type', None) == 'no_db_connection'
 

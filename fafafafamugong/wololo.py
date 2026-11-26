@@ -102,7 +102,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
         stopped = interrupted or error is not None
         if error is not None:
             log.record('reply', error)
-            vibe.notice(*explain(error, settings.llm_base_url))
+            vibe.notice(*explain(error))
         if flare.text:
             session.append({'role': 'assistant', 'content': flare.text}, stopped, usage=usage)
             if stopped:
@@ -146,7 +146,7 @@ def compress(session: Session, client: OpenAI, settings: Settings, cut: int):
             summary = context.summarize(client, settings.wololo_model, session.messages, cut)
     except openai.APIError as e:
         log.record('compress', e)
-        vibe.notice('warn', 'compression failed', explain(e, settings.llm_base_url)[2])
+        vibe.notice('warn', 'compression failed', explain(e)[2])
         return
     except context.CompressError as e:
         log.record('compress', e)
@@ -160,13 +160,13 @@ def compress(session: Session, client: OpenAI, settings: Settings, cut: int):
     vibe.show_compressed(before, after, low=1 - after / before < context.MIN_SAVING)
 
 
-def explain(error: openai.APIError, base_url: str) -> tuple[str, str, str]:
+def explain(error: openai.APIError) -> tuple[str, str, str]:
     """Turn an API error into a notice: (level, tag, text)."""
     match error:
         case openai.APITimeoutError():  # before APIConnectionError, which it subclasses
             return 'error', 'timed out', 'try again'
         case openai.APIConnectionError():
-            return 'error', 'connection failed', f'is the proxy at {base_url} running?'
+            return 'error', 'connection failed', 'cannot reach the proxy; please check it'
         case openai.AuthenticationError():
             return 'error', 'unauthorized', 'run fa --login to enter a new key'
         case openai.BadRequestError() if 'Invalid model name' in error.message:  # LiteLLM's words; it has no error code for this

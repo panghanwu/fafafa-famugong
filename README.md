@@ -4,7 +4,7 @@ A lightweight, terminal-based LLM harness.
 
 `Famugong` talks to any OpenAI-compatible API, keeps every session on disk, and compresses long conversations on its own.
 
-> **Beta (0.1.0b1).** Chat only.
+> **Beta (0.1.0b2).** Chat only.
 
 ## Install
 
@@ -27,3 +27,13 @@ fa
 **The first run sets up your proxy, key and model.**
 
 `fa --help` lists the options; type `/help` inside the chatroom for commands and shortcuts.
+
+## Team mode
+
+Use the `king` command to manage a team:
+
+```bash
+sudo fa king
+```
+
+It creates `/etc/famugong/king.toml`, which applies to every user on the machine.

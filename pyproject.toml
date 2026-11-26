@@ -4,7 +4,7 @@ build-backend = 'setuptools.build_meta'
 
 [project]
 name = 'fafafa-famugong'
-version = '0.1.0b1'
+version = '0.1.0b2'
 description = 'A lightweight LLM harness for the terminal'
 readme = 'README.md'
 license = 'MIT'

@@ -1,7 +1,8 @@
+import re
 import sys
 import tomllib
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -19,20 +20,23 @@ class Settings(BaseModel):
     # Secret: from <home>/key, written by fa --login
     llm_api_key: str | None = None
 
-    # Per run: from --age, or from the proxy in team mode
+    # Per run: from --age, or king.toml in team mode
     age: Literal['dark'] = 'dark'
 
-    # From config.toml, or admin.toml in team mode; descriptions go into config.toml
-    llm_base_url: str = Field('http://localhost:4000', description='The LiteLLM proxy every request goes to')
+    # From config.toml (king.toml sets llm_base_url in team mode); descriptions go into config.toml
+    llm_base_url: str = Field('http://localhost:4000', description='The proxy URL every request goes to')
     wololo_model: str = Field('gpt-oss-120b', description='The main model')
-    catzor_model: str = Field('', description='The model for guard; empty uses wololo_model')
+    guard_model: str = Field('', description='The model for guard; empty uses wololo_model')
     context_limit: int = Field(128000, gt=0, description='How many tokens the model can hold, the prompt and the reply together')
 
 
-def load_settings(home: Path, **values) -> Settings:
-    """Settings from config.toml plus the given values; exits on a bad config.toml."""
+PLAYABLE_AGES = get_args(Settings.model_fields['age'].annotation)  # the Literal in Settings is the one list of playable ages
+
+
+def load_settings(home: Path, defaults: dict | None = None, **values) -> Settings:
+    """Settings from defaults, then config.toml, then values; exits on a bad config.toml."""
     try:
-        return Settings(**(read_config(home) | values))  # the given values win over config.toml
+        return Settings(**((defaults or {}) | read_config(home) | values))
     except ValidationError as e:
         problems = '\n'.join(f'  {error['loc'][0]}: {error['msg']}' for error in e.errors())
         sys.exit(f'{home / CONFIG_NAME}:\n{problems}')
@@ -53,11 +57,25 @@ def read_config(home: Path) -> dict:
     return config
 
 
-def make_config(values: dict[str, str | int]) -> str:
-    """The text of a config.toml: the given values, defaults for the rest."""
+def make_config(values: dict[str, str | int | None]) -> str:
+    """The text of a config.toml: the given values, defaults for the rest; None leaves a setting out."""
     lines = ['# fa settings. The access key is not kept here: run fa --login to enter a new one.']
     for name, field in Settings.model_fields.items():
-        if name in NOT_IN_CONFIG:
+        value = values.get(name, field.default)
+        if name in NOT_IN_CONFIG or value is None:
             continue
-        lines += ['', f'# {field.description}', f'{name} = {values.get(name, field.default)!r}']  # repr gives valid TOML for str and int
+        lines += ['', f'# {field.description}', f'{name} = {value!r}']  # repr gives valid TOML for str and int
     return '\n'.join(lines) + '\n'
+
+
+def set_config(home: Path, name: str, value: str | int):
+    """Change one setting in config.toml and leave the rest of the file as it is."""
+    path = home / CONFIG_NAME
+    text = path.read_text()
+    line = f'{name} = {value!r}'
+    pattern = re.compile(rf'^{name}\s*=.*$', re.MULTILINE)
+    if pattern.search(text):
+        text = pattern.sub(lambda match: line, text, count=1)  # a function, so backslashes in the value stay as they are
+    else:
+        text = text.rstrip('\n') + f'\n\n# {Settings.model_fields[name].description}\n{line}\n'
+    path.write_text(text)

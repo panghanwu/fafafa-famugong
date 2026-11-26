@@ -16,20 +16,29 @@
         └── lock                  held while the session is open
 ```
 
+## `/etc/famugong`
+
+```text
+/etc/famugong/                    created by fa king
+├── king.toml                     keys and their ages
+└── king.toml.bak                 backup of king.toml
+```
+
 ## The repo
 
 ```text
 fafafa-famugong/
 ├── fafafafamugong/          the fa package
 │   ├── cli.py               arguments and startup
-│   ├── access.py            first run, login and models
+│   ├── access.py            first run, login, models and team ages
+│   ├── king.py              the team mode console: sudo fa king
 │   ├── wololo.py            the chat loop
 │   ├── slash.py             commands and shortcuts
 │   ├── context.py           compression
 │   ├── session.py           sessions on disk
 │   ├── log.py               error.log
 │   ├── settings.py          config.toml
-│   ├── schema.py            reads ages.toml and blacksmith.toml
+│   ├── schema.py            reads ages.toml and blacksmith.toml; reads and writes king.toml
 │   ├── tags.py              prompt tags
 │   ├── vibe.py              terminal UI
 │   ├── ages.toml            the four ages
