@@ -55,7 +55,7 @@ Skip the plan for small, clear fixes.
 '''
 
 [compress]
-type = 'catzor'
+type = 'command'
 description = 'Summarize the earlier part of a long conversation so it fits in the context.'
 prompt = '''
 A long conversation between a user and an AI assistant no longer fits in the assistant's context.

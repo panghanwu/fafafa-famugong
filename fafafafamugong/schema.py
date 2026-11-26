@@ -33,7 +33,7 @@ def to_age(value: str) -> str:
 class Tech(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
-    type: Literal['shortcut', 'skill', 'catzor']
+    type: Literal['shortcut', 'skill', 'command']
     description: str
     prompt: str
 

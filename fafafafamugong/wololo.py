@@ -5,7 +5,7 @@ from pathlib import Path
 import openai
 from openai import OpenAI
 
-from fafafafamugong import catzor, log, slash, vibe
+from fafafafamugong import context, log, slash, vibe
 from fafafafamugong.schema import BLACKSMITH, TOWN_CENTER, Age, Tech
 from fafafafamugong.session import Session, SessionError, get_session_id, read_usage
 from fafafafamugong.settings import COMPRESS_AT, Settings
@@ -119,24 +119,24 @@ def compress_if_full(session: Session, client: OpenAI, settings: Settings):
     before = session.estimate_tokens()
     if before is None or before < COMPRESS_AT * settings.context_limit:
         return
-    cut = catzor.find_cut(session.messages)
+    cut = context.find_cut(session.messages)
     if cut is None:
         vibe.notice('warn', 'context nearly full', 'nothing to compress; consider a new session')
         return
     try:
         with vibe.Busy('compressing'):
-            summary = catzor.summarize(client, settings.wololo_model, session.messages, cut)
+            summary = context.summarize(client, settings.wololo_model, session.messages, cut)
     except openai.APIError as e:
         log.record('compress', e)
         vibe.notice('warn', 'compression failed', explain(e, settings.llm_base_url)[2])
         return
-    except catzor.CatzorError as e:
+    except context.CompressError as e:
         log.record('compress', e)
         vibe.notice('warn', 'compression failed', str(e))
         return
     session.compress(cut, summary)
     after = session.estimate_tokens()
-    vibe.show_compressed(before, after, low=1 - after / before < catzor.MIN_SAVING)
+    vibe.show_compressed(before, after, low=1 - after / before < context.MIN_SAVING)
 
 
 def explain(error: openai.APIError, base_url: str) -> tuple[str, str, str]:

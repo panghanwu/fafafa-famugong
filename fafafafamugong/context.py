@@ -1,25 +1,17 @@
-"""Helper agent for side jobs, such as compression."""
+"""Compress the context by summarizing its earlier part."""
 from openai import OpenAI
 
 from fafafafamugong.schema import BLACKSMITH, Tech
 from fafafafamugong.tags import PromptTag, is_marked, mark_text
 
-COMPRESS = 'compress'  # the job's name in blacksmith.toml
+COMPRESS = 'compress'  # its name in blacksmith.toml
 COMPRESS_SHARE = 0.8  # share of the conversation, by length, to summarize
 MIN_SAVING = 0.2  # a compression that saves less suggests a new session
 MIN_RAW_TURNS = 3  # latest turns kept word for word
 
 
-class CatzorError(Exception):
-    """A job came back with nothing usable."""
-
-
-def run_catzor(client: OpenAI, model: str, tech: Tech, text: str) -> str:
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{'role': 'system', 'content': tech.prompt.strip()}, {'role': 'user', 'content': text}],
-    )
-    return (response.choices[0].message.content or '').strip()
+class CompressError(Exception):
+    """The summary came back empty."""
 
 
 def find_cut(messages: list[dict]) -> int | None:
@@ -53,7 +45,12 @@ def summarize(client: OpenAI, model: str, messages: list[dict], cut: int) -> str
         f'## Earlier part (summarize this)\n\n{dump(messages[1:cut])}\n\n'
         f'## Recent part (stays word for word; for context only)\n\n{dump(messages[cut:])}'
     )
-    summary = run_catzor(client, model, Tech.load(BLACKSMITH)[COMPRESS], text)
+    tech = Tech.load(BLACKSMITH)[COMPRESS]
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{'role': 'system', 'content': tech.prompt.strip()}, {'role': 'user', 'content': text}],
+    )
+    summary = (response.choices[0].message.content or '').strip()
     if not summary:
-        raise CatzorError('the summary came back empty')
+        raise CompressError('the summary came back empty')
     return mark_text(summary, PromptTag.COMPRESSED)

@@ -36,7 +36,7 @@ def _quit(session: Session, args: str):
 
 @builtin('rename', 'Rename the session', aliases=('r',), usage='<title>')
 def _rename(session: Session, args: str):
-    if not args:  # later: let catzor pick a title
+    if not args:
         vibe.notice('warn', 'usage', '/rename <title>')
         return
     session.rename(args)

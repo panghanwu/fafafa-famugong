@@ -51,7 +51,7 @@ LEVELS = {  # notice level: (symbol, colour)
     'warn': ('!', 'yellow'),
     'error': ('✗', 'red'),
 }
-COMPRESSING_STYLE = '#d19a66'  # the spinner while catzor compresses; the amber of a filling context
+COMPRESSING_STYLE = '#d19a66'  # the spinner while compressing; the amber of a filling context
 PRERELEASE_STYLE = '#d19a66'  # the same amber: not final yet
 PRERELEASES = {'a': 'alpha', 'b': 'beta', 'rc': 'rc'}  # PEP 440 pre-release letters
 STATES = {  # reply state: (label, style)

@@ -25,7 +25,7 @@ fafafa-famugong/
 │   ├── access.py            first run, login and models
 │   ├── wololo.py            the chat loop
 │   ├── slash.py             commands and shortcuts
-│   ├── catzor.py            compression
+│   ├── context.py           compression
 │   ├── session.py           sessions on disk
 │   ├── log.py               error.log
 │   ├── settings.py          config.toml
@@ -33,7 +33,7 @@ fafafa-famugong/
 │   ├── tags.py              prompt tags
 │   ├── vibe.py              terminal UI
 │   ├── ages.toml            the four ages
-│   ├── blacksmith.toml      shortcuts, skills and catzor jobs
+│   ├── blacksmith.toml      shortcuts, skills and command prompts
 │   ├── towncenter.md        the system prompt every age shares
 │   ├── __init__.py          the version
 │   └── __main__.py          python -m fafafafamugong
