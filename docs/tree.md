@@ -34,7 +34,7 @@ fafafa-famugong/
 │   ├── vibe.py              terminal UI
 │   ├── ages.toml            the four ages
 │   ├── blacksmith.toml      shortcuts, skills and catzor jobs
-│   ├── town_center.md       the system prompt every age shares
+│   ├── towncenter.md        the system prompt every age shares
 │   ├── __init__.py          the version
 │   └── __main__.py          python -m fafafafamugong
 ├── docs/                    architecture and file trees
