@@ -28,7 +28,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
     client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
     run = {
         'cwd': str(Path.cwd()),
-        'model': settings.model,
+        'model': settings.wololo_model,
         'age': settings.age
     }
     system_prompt = cook_system_prompt(age, techs)
@@ -72,7 +72,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
             vibe.notice('warn', 'interrupted', 'your message is back in the input box')
             continue
 
-        flare = vibe.Flare(settings.model)
+        flare = vibe.Flare(settings.wololo_model)
         usage = None
         interrupted = False
         error = None
@@ -80,7 +80,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
             with (
                 flare,
                 client.chat.completions.create(
-                    model=settings.model,
+                    model=settings.wololo_model,
                     messages=slash.expand_shortcuts(session.messages, commands),  # shortcuts are filled only when sending
                     stream=True,
                     stream_options={'include_usage': True},
@@ -125,7 +125,7 @@ def compress_if_full(session: Session, client: OpenAI, settings: Settings):
         return
     try:
         with vibe.Busy('compressing'):
-            summary = catzor.summarize(client, settings.model, session.messages, cut)
+            summary = catzor.summarize(client, settings.wololo_model, session.messages, cut)
     except openai.APIError as e:
         log.record('compress', e)
         vibe.notice('warn', 'compression failed', explain(e, settings.llm_base_url)[2])
@@ -149,7 +149,7 @@ def explain(error: openai.APIError, base_url: str) -> tuple[str, str, str]:
         case openai.AuthenticationError():
             return 'error', 'unauthorized', 'run fa --login to enter a new key'
         case openai.BadRequestError() if 'Invalid model name' in error.message:  # LiteLLM's words; it has no error code for this
-            return 'error', 'unknown model', 'not on the proxy; check model in config.toml'
+            return 'error', 'unknown model', 'not on the proxy; check wololo_model in config.toml'
         case openai.RateLimitError():
             return 'warn', 'rate limited', 'wait a moment and try again'
         case openai.APIStatusError():

@@ -24,7 +24,8 @@ class Settings(BaseModel):
 
     # From config.toml, or admin.toml in team mode; descriptions go into config.toml
     llm_base_url: str = Field('http://localhost:4000', description='The LiteLLM proxy every request goes to')
-    model: str = Field('gpt-oss-120b', description='The model that does the work, by its name on the proxy')
+    wololo_model: str = Field('gpt-oss-120b', description='The main model')
+    catzor_model: str = Field('', description='The model for guard; empty uses wololo_model')
     context_limit: int = Field(128000, gt=0, description='How many tokens the model can hold, the prompt and the reply together')
 
 

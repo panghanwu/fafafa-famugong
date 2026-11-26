@@ -31,7 +31,7 @@ def setup(home: Path):
     """First run: ask for the proxy URL and a key, then write config.toml."""
     _require_terminal('set fa up')
     default_url = Settings.model_fields['llm_base_url'].default
-    default_model = Settings.model_fields['model'].default
+    default_model = Settings.model_fields['wololo_model'].default
     vibe.notice('info', 'setup', 'first run: where is your LiteLLM proxy?')
     while True:
         try:
@@ -50,7 +50,7 @@ def setup(home: Path):
     save_key(home, key)  # only now: a cancelled setup leaves nothing behind
     vibe.notice('ok', 'logged in', f'key saved to {home / KEY_NAME}')
     path = home / CONFIG_NAME
-    path.write_text(make_config({'llm_base_url': base_url, 'model': model}))
+    path.write_text(make_config({'llm_base_url': base_url, 'wololo_model': model}))
     vibe.notice('ok', 'created', str(path))
     vibe.notice('info', 'next', 'run fa to start')
 
@@ -115,7 +115,7 @@ def fetch_models(base_url: str, key: str) -> list[str]:
 
 
 def list_models(settings: Settings):
-    vibe.show_models(_models_or_exit(settings), current=settings.model)
+    vibe.show_models(_models_or_exit(settings), current=settings.wololo_model)
 
 
 def switch_model(home: Path, settings: Settings, name: str):
@@ -123,10 +123,10 @@ def switch_model(home: Path, settings: Settings, name: str):
     models = _models_or_exit(settings)
     if name not in models:
         vibe.notice('error', 'unknown model', f'{name} is not on the proxy; pick one of these')
-        vibe.show_models(models, current=settings.model)
+        vibe.show_models(models, current=settings.wololo_model)
         sys.exit(1)
-    (home / CONFIG_NAME).write_text(make_config(read_config(home) | {'model': name}))
-    settings.model = name
+    (home / CONFIG_NAME).write_text(make_config(read_config(home) | {'wololo_model': name}))
+    settings.wololo_model = name
     vibe.notice('ok', 'model', f'{name} saved to config.toml')
 
 

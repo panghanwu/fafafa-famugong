@@ -97,7 +97,7 @@ def make_reader(home: Path, commands: dict, session: Session, settings: Settings
 
 def _status(session: Session, settings: Settings) -> list[tuple[str, str]]:
     """Status line above the input: session, title, model and context usage."""
-    parts = [get_session_id(session.dir) if session.dir else 'new session', session.meta.get('title'), settings.model]
+    parts = [get_session_id(session.dir) if session.dir else 'new session', session.meta.get('title'), settings.wololo_model]
     fragments = [('dim', '  '.join(part for part in parts if part))]
     if session.usage:
         tokens = get_context_tokens(session.usage)

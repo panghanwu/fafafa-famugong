@@ -63,7 +63,7 @@ def _describe(event: str, error: BaseException, details: dict) -> str:
     if isinstance(error, openai.APIStatusError):
         found['request'] = error.response.headers.get('x-litellm-call-id')  # to find it in LiteLLM's logs
     if _settings is not None:
-        found['model'] = _settings.model
+        found['model'] = _settings.wololo_model
         found['url'] = _settings.llm_base_url
         if (tokens := _session.estimate_tokens()) is not None:
             found['context'] = f'~{tokens} tokens ({int(tokens / _settings.context_limit * 100)}%)'
