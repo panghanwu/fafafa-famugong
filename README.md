@@ -4,7 +4,7 @@ A lightweight, terminal-based LLM harness.
 
 `Famugong` talks to any OpenAI-compatible API, keeps every session on disk, and compresses long conversations on its own.
 
-> **Beta (0.1.0b2).** Chat only.
+> **Beta (0.1.0b3).** Chat only.
 
 ## Install
 
