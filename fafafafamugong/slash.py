@@ -4,7 +4,7 @@ from typing import Callable
 
 from fafafafamugong import vibe
 from fafafafamugong.schema import BLACKSMITH, SLASH_NAME, Tech
-from fafafafamugong.session import Session
+from fafafafamugong.session import Session, tally
 from fafafafamugong.settings import Settings
 from fafafafamugong.tags import PromptTag, is_marked, mark_text
 
@@ -70,6 +70,11 @@ def _help(session: Session, settings: Settings, args: str):
     techs = Tech.load(BLACKSMITH)
     skills = {name: tech for name, tech in techs.items() if tech.type == 'skill'}
     vibe.show_help(merge(techs), skills)
+
+
+@builtin('status', 'Show the session in detail')
+def _status(session: Session, settings: Settings, args: str):
+    vibe.show_status(session, settings, tally(session.dir) if session.dir else None)
 
 
 def parse(text: str) -> tuple[str, str] | None:

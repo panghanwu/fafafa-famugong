@@ -2,6 +2,7 @@
 import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -100,16 +101,21 @@ def _status(session: Session, settings: Settings) -> list[tuple[str, str]]:
     parts = [get_session_id(session.dir) if session.dir else 'new session', session.meta.get('title'), settings.wololo_model]
     fragments = [('dim', '  '.join(part for part in parts if part))]
     if session.usage:
-        tokens = get_context_tokens(session.usage)
-        share = tokens / settings.context_limit
-        # floor to match the style thresholds
-        estimate = '~' if session.usage.get('estimated') else ''  # estimated after compression
-        context = f'{estimate}{_format_tokens(tokens)} tokens ({int(share * 100)}%)'
-        style = next(style for start, style in CONTEXT_STYLES if share >= start)
+        context, style = _context(session, settings)
         fragments += [('dim', '  '), (style, context)]
     if count := session.meta.get('compressions'):
         fragments.append(('dim', f'  compressed ×{count}'))
     return fragments
+
+
+def _context(session: Session, settings: Settings, limit: bool = False) -> tuple[str, str]:
+    """The context share as the status line shows it: (text, style); '~' marks an estimate."""
+    tokens = get_context_tokens(session.usage)
+    share = tokens / settings.context_limit  # floored below to match the style thresholds
+    estimate = '~' if session.usage.get('estimated') else ''
+    of = f' / {_format_tokens(settings.context_limit)}' if limit else ''
+    style = next(style for start, style in CONTEXT_STYLES if share >= start)
+    return f'{estimate}{_format_tokens(tokens)}{of} tokens ({int(share * 100)}%)', style
 
 
 def _format_tokens(count: int) -> str:
@@ -219,6 +225,33 @@ def confirm(question: str) -> bool:
     except (EOFError, KeyboardInterrupt):
         return False
     return answer.strip().lower() in ('y', 'yes')
+
+
+def show_status(session: Session, settings: Settings, totals: dict | None):
+    """The session in detail; a new one shows only the model and the age."""
+    rows = []
+    if session.dir:
+        rows.append(('session', Text.assemble(get_session_id(session.dir), f'  {session.meta.get("title") or ""}')))
+        if runs := session.meta.get('runs'):
+            started = datetime.fromisoformat(runs[0]['at']).strftime('%Y-%m-%d %H:%M')
+            resumed = len(runs) - 1  # each run after the first is a resume
+            times = f'  resumed {resumed} time{"s" * (resumed > 1)}' if resumed else ''
+            rows.append(('started', Text.assemble(started, (times, 'dim'))))
+    rows.append(('model', Text(settings.wololo_model)))
+    rows.append(('age', Text(f'{settings.age.title()} Age', 'italic')))
+    if session.usage:
+        context, style = _context(session, settings, limit=True)
+        compressions = session.meta.get('compressions')
+        rows.append(('context', Text.assemble((context, style), (f'  compressed ×{compressions}' if compressions else '', 'dim'))))
+    if totals:
+        rows.append(('turns', Text(str(totals['turns']))))
+        tokens = f'{_format_tokens(totals["prompt_tokens"])} tokens in, {_format_tokens(totals["completion_tokens"])} out'
+        cost = f'${totals["cost"]:.4f}  ' if totals['cost'] is not None else ''  # only APIs such as LiteLLM report it
+        rows.append(('spent', Text.assemble(cost, (tokens, 'dim'))))
+    grid = Table.grid(padding=(0, 2))
+    for label, value in rows:
+        grid.add_row(Text(label, 'dim'), value)
+    console.print(Indent(grid))
 
 
 def show_help(commands: dict, skills: dict[str, Tech]):

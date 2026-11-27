@@ -202,6 +202,21 @@ def get_last_usage(folder: Path) -> dict | None:
     return next((r['usage'] for r in reversed(records) if 'usage' in r), None)
 
 
+def tally(folder: Path) -> dict:
+    """Turns taken and what the API reported for them, from full.jsonl; cost is None if the API gave none."""
+    records = _read_jsonl(folder / 'full.jsonl')
+    users = [r for r in records if r['message']['role'] == 'user' and 'compressed' not in r]
+    turns = sum(-1 if r.get('retracted') or r.get('rolled_back') else 1 for r in users)  # a taken-back message is logged twice
+    usages = [r['usage'] for r in records if 'usage' in r and not r['usage'].get('estimated')]
+    costs = [u['cost'] for u in usages if 'cost' in u]
+    return {
+        'turns': turns,
+        'prompt_tokens': sum(u['prompt_tokens'] for u in usages),
+        'completion_tokens': sum(u['completion_tokens'] for u in usages),
+        'cost': sum(costs) if costs else None,
+    }
+
+
 def count_chars(messages: list[dict]) -> int:
     return sum(len(m['content']) for m in messages)
 
