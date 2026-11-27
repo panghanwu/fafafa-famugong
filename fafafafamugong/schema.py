@@ -89,6 +89,7 @@ class Kingdom(BaseModel):
 
     llm_base_url: str = Field(pattern=rf'^{URL.pattern}$')
     default_wololo_model: str | None = None  # for users who have not picked one
+    banner: str | None = None  # rich markup shown at the top of fa; None shows the default
     keys: list[KeyEntry] = []
 
     @model_validator(mode='after')
@@ -128,6 +129,8 @@ class Kingdom(BaseModel):
         lines = ['# fa team mode; manage it with sudo fa king', '', f'llm_base_url = {_toml(self.llm_base_url)}']
         if self.default_wololo_model:
             lines.append(f'default_wololo_model = {_toml(self.default_wololo_model)}')
+        if self.banner:
+            lines.append(f'banner = {_toml(self.banner)}')
         for entry in self.keys:
             lines += ['', '[[keys]]']
             lines += [f'{name} = {_toml(value)}' for name, value in entry.model_dump(exclude_none=True).items()]
@@ -139,4 +142,6 @@ def _toml(value: str | int | date) -> str:
         return value.isoformat()
     if isinstance(value, int):
         return str(value)
+    if '\n' in value and "'''" not in value:
+        return f"'''\n{value}'''"  # a multi-line literal string keeps backslashes and spaces as typed
     return f"'{value}'" if "'" not in value else json.dumps(value, ensure_ascii=False)  # JSON strings are valid TOML

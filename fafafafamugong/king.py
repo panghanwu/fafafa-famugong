@@ -15,6 +15,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.key_binding import KeyBindings
 from pydantic import ValidationError
+from rich.errors import MarkupError, StyleSyntaxError
 from rich.table import Table
 from rich.text import Text
 
@@ -120,6 +121,16 @@ def _show_banner(kingdom: Kingdom):
     vibe.console.print(Text('help for commands  ctrl+d to quit', style='dim'))
 
 
+def _newline_bindings() -> KeyBindings:
+    bindings = KeyBindings()
+
+    @bindings.add('escape', 'enter')
+    def _newline(event):
+        event.current_buffer.insert_text('\n')
+
+    return bindings
+
+
 def _key_bindings() -> KeyBindings:
     bindings = KeyBindings()
 
@@ -161,6 +172,8 @@ def _status(kingdom: Kingdom, args: str):
     grid.add_row(Text('file', 'dim'), Text.assemble(str(KING), '  ', file_state))
     grid.add_row(Text('proxy', 'dim'), Text.assemble(kingdom.llm_base_url, '  ', proxy_state))
     grid.add_row(Text('model', 'dim'), kingdom.default_wololo_model or 'users pick their own')
+    lines = len(kingdom.banner.splitlines()) if kingdom.banner else 0
+    grid.add_row(Text('banner', 'dim'), f'custom, {lines} line{"s" * (lines > 1)}' if lines else 'default')
     grid.add_row(Text('keys', 'dim'), Text.assemble(str(len(kingdom.keys)), (f'  {by_age}' if by_age else '', 'dim')))
     vibe.console.print(vibe.Indent(grid))
 
@@ -227,6 +240,25 @@ def _url(kingdom: Kingdom, args: str):
         kingdom.llm_base_url = args
         kingdom.save()
     vibe.notice('ok' if args else 'info', 'proxy', kingdom.llm_base_url)
+
+
+@command('banner', 'Edit the banner at the top of fa; rich markup sets colours')
+def _banner(kingdom: Kingdom, args: str):
+    vibe.notice('info', 'banner', 'esc+enter for a new line; empty for the default')
+    text = PromptSession(key_bindings=_newline_bindings()).prompt('', default=kingdom.banner or vibe.TEAM_BANNER)
+    text = ''.join(c for c in text if c.isprintable() or c == '\n')  # control characters would break the TOML
+    text = '\n'.join(line.rstrip() for line in text.split('\n')).strip('\n')  # leading spaces stay, for ASCII art
+    try:
+        preview, broken = vibe.parse_markup(text or vibe.TEAM_BANNER), None
+    except (MarkupError, StyleSyntaxError) as e:
+        preview, broken = Text(text), e  # saved anyway: fa shows broken markup as plain text
+    kingdom.banner = text if text and text != vibe.TEAM_BANNER else None
+    kingdom.save()
+    vibe.console.print(preview, no_wrap=True, overflow='crop')
+    if broken:
+        vibe.notice('warn', 'saved as plain text', f'the markup is broken: {broken}')
+    else:
+        vibe.notice('ok', 'banner', 'saved')
 
 
 @command('help', 'List these commands')

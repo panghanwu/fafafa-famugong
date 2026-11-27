@@ -77,7 +77,7 @@ def main():
         return
     if args.model:
         switch_model(home, settings, args.model)
-    chat(settings, home, folder)
+    chat(settings, home, folder, (kingdom.banner or vibe.TEAM_BANNER) if kingdom else None)
 
 
 def format_sessions(folders: list[Path], context_limit: int) -> str:

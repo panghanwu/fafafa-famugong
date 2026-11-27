@@ -21,7 +21,7 @@ def cook_system_prompt(age: Age, techs: dict[str, Tech]) -> str:
     return '\n\n'.join(parts)
 
 
-def chat(settings: Settings, home: Path, folder: Path | None = None):
+def chat(settings: Settings, home: Path, folder: Path | None = None, team_banner: str | None = None):
     age = Age.load(settings.age)
     techs = Tech.load(BLACKSMITH)
     commands = slash.merge(techs)
@@ -33,7 +33,7 @@ def chat(settings: Settings, home: Path, folder: Path | None = None):
     }
     system_prompt = cook_system_prompt(age, techs)
 
-    vibe.show_banner(settings.age)
+    vibe.show_banner(settings.age, team_banner)
 
     # create/load session
     if folder is None:

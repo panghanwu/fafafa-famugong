@@ -12,10 +12,12 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.lexers import Lexer
 from rich.console import Console
+from rich.errors import MarkupError, StyleSyntaxError
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.segment import Segment
 from rich.spinner import Spinner
+from rich.style import Style
 from rich.table import Table
 from rich.text import Text
 
@@ -55,6 +57,7 @@ LEVELS = {  # notice level: (symbol, colour)
 COMPRESSING_STYLE = '#d19a66'  # the spinner while compressing; the amber of a filling context
 PRERELEASE_STYLE = '#d19a66'  # the same amber: not final yet
 PRERELEASES = {'a': 'alpha', 'b': 'beta', 'rc': 'rc'}  # PEP 440 pre-release letters
+TEAM_BANNER = '[bold white on #c678dd] TEAM MODE [/]'  # above the banner in team mode, unless king.toml sets one
 STATES = {  # reply state: (label, style)
     'sent': ('sent', 'dim'),  # request out, nothing back yet
     'thinking': ('thinking', 'magenta'),  # reasoning arriving before the reply, e.g. from a local model
@@ -194,16 +197,30 @@ def _key_bindings() -> KeyBindings:
 
 # Output
 
-def show_banner(age: str):
-    """The two lines shown when fa starts."""
+def show_banner(age: str, team_banner: str | None = None):
+    """The two lines shown when fa starts, under the team banner in team mode."""
     if not console.is_terminal:  # keep piped output clean
         return
+    if team_banner is not None:
+        try:
+            text = parse_markup(team_banner)
+        except (MarkupError, StyleSyntaxError):
+            text = Text(team_banner)  # broken markup: show it as written rather than not at all
+        console.print(text, no_wrap=True, overflow='crop')  # wrapping would break ASCII art
     stage = _prerelease(__version__)
     console.print(Text.assemble(
         ('fafafa famugong', 'bold'), f' {__version__}' if __version__ else '', '  ', (f'{age.title()} Age', 'italic'),
         (f'  {stage}', PRERELEASE_STYLE) if stage else '',
     ))
     console.print(Text('/help for commands  esc+enter for a new line  ctrl+d to quit', style='dim'))
+
+
+def parse_markup(markup: str) -> Text:
+    """Text with its rich markup applied; raises MarkupError or StyleSyntaxError when it is broken."""
+    text = Text.from_markup(markup)
+    for span in text.spans:
+        Style.parse(str(span.style))  # a bad colour only fails when the style is parsed
+    return text
 
 
 def _prerelease(version: str) -> str | None:
